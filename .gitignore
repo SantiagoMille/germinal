@@ -9,7 +9,6 @@ __pycache__/
 **/.DS_Store
 *.pyc
 *.csv
-*.sh
 *.gif
 *.egg-info/
 *.pt

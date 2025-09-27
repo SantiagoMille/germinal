@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  germinal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAX_CUDA: "true"
+        CUDA_SUFFIX: "cu124"
+        TORCH_VERSION: "2.6.0"
+        TORCHVISION_VERSION: "0.21.0"
+        TORCHAUDIO_VERSION: "2.6.0"
+        TORCH_INDEX_URL: "https://download.pytorch.org/whl/cu124"
+    image: germinal:latest
+    gpus: all
+    ipc: host
+    shm_size: "16gb"
+    environment:
+      - HYDRA_FULL_ERROR=1
+      - MPLBACKEND=Agg
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./pdbs:/workspace/pdbs
+      - ./runs:/workspace/runs
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    command: bash
+
+
