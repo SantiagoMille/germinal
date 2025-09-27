@@ -516,7 +516,7 @@ def _run_af3(
     return_code = popen.wait()
 
     if return_code:
-        raise subprocess.CalledProcessError(return_code)
+        raise subprocess.CalledProcessError(return_code, run_cmds)
 
     pdb_path, scores = extract_structure_and_scores(output_dir, input_json["name"])
 
