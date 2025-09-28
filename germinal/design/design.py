@@ -372,6 +372,7 @@ def germinal_design(
             final_plddt < save_filters["plddt"]
             or final_iptm < save_filters["i_ptm"]
             or final_ipae >= save_filters["i_pae"]
+            or fail_confidence
         ):
             af_model.aux["log"]["terminate"] = "LowConfidence"
             if not fail_confidence:
