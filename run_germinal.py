@@ -139,7 +139,7 @@ def main(cfg: DictConfig):
             )
         )
 
-        utils.clear_memory()
+        utils.clear_memory(clear_jax=False)
         if not pass_initial_filters:
             # save trajectory as not passing initial cofolding filters
             print("Trajectory not passing initial cofolding filters, skipping to next trajectory")
@@ -220,8 +220,8 @@ def main(cfg: DictConfig):
                     num_accepted += 1
                 else:
                     num_failed += 1
-                utils.clear_memory()
-
+                utils.clear_memory(clear_jax=False)
+    
     # print and save final run summary
     total_runtime = utils.get_clean_time(time.time(), start_time)
     run_summary = f"Finished all designs after {i + 1} attempted trajectories.\n" \

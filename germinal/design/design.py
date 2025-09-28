@@ -31,6 +31,7 @@ import csv
 import jax
 import jax.numpy as jnp
 from scipy.special import softmax
+
 from colabdesign import mk_afdesign_model, clear_mem
 from colabdesign.mpnn import mk_mpnn_model
 from colabdesign.af.alphafold.common import residue_constants
@@ -405,14 +406,8 @@ def germinal_design(
     if run_settings.get("save_design_trajectory_plots", False):
         log_trajectory(af_model, design_name, io)
         plot_trajectory(af_model, design_name, io)
-        # also save animated visualisations of PSSM / gradient evolution
-        try:
-            # save single-grid GIF for easy comparison
-            save_pssm_gradient_grid_animation(af_model, design_name, io)
-        except Exception as e:
-            print(f"Failed to save grid PSSM/gradient animations: {e}")
-
-    ### save the hallucination trajectory animation
+        # 1 minute + to save gif, so commenting out for now
+        # save_pssm_gradi ent_grid_animation(af_model, design_name, io)
     if run_settings.get("save_design_animations", False):
         plots = af_model.animate(dpi=150)
         with open(
