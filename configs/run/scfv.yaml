@@ -11,7 +11,7 @@ vh_len: 120
 vl_len: 108
 
 # Loss function parameters
-weights_plddt: 1.0
+weights_plddt: 0.5
 weights_i_plddt: 1.0
 weights_pae_intra: 0.1
 weights_pae_inter: 0.5
@@ -35,13 +35,13 @@ softmax_steps: 35
 search_steps: 10
 search_mutation_rate: 0.05
 plddt_threshold: 0.8
-i_ptm_threshold: 0.68
-i_pae_threshold: 0.27
+i_ptm_threshold: 0.65
+i_pae_threshold: 0.3
 seq_entropy_threshold: 0.10
 
 # IgLM settings
 grad_merge_method: "pcgrad"
-iglm_scale: [0.0, 0.2, 0.4, 1.0]
+iglm_scale: [0.1, 0.2, 0.4, 1.0]
 iglm_temp: 0.6
 iglm_species: "[HUMAN]"
 seq_init_mode: ["gumbel", "soft"]  # STATIC: Fixed list, no argparse option
@@ -59,7 +59,7 @@ model_path: "abmpnn"
 mpnn_weights: "abmpnn"
 
 # Structure prediction settings
-structure_model: "chai"
+structure_model: "af3"
 msa_mode: "target"
 
 # AF3 configuration (required when structure_model == "af3")
@@ -77,7 +77,6 @@ rm_binder: false
 rm_binder_seq: true
 rm_binder_sc: true
 
-
 ###### REMAINING SETTINGS ######
 # These settings are typically not changed from run to run.
 
@@ -85,8 +84,8 @@ rm_binder_sc: true
 learning_rate: 0.1
 optimizer: "sgd"
 normalize_gradient: true
-linear_lr_annealing: false
-min_lr_scale: 0.01
+linear_lr_annealing: true
+min_lr_scale: 0.25
 use_multimer_design: true
 sample_models: true
 num_models: 1
@@ -104,10 +103,10 @@ use_i_ptm_loss: true
 
 # File management settings
 save_design_animations: false
-save_design_trajectory_plots: true
+save_design_trajectory_plots: false
 
 # Other settings
-omit_AAs: false
+omit_AAs: "C"
 force_reject_AA: false
 dgram_cce: 0.01
 show_config: true

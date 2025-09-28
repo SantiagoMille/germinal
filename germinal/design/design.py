@@ -82,9 +82,9 @@ def germinal_design(
 
     use_pos_distance = run_settings.get("use_pos_distance", True)
     sequence = run_settings.get("sequence", None)
-    grad_merge_method = run_settings.get("grad_merge_method", "scale")
-    iglm_scale = run_settings.get("iglm_schedule", [0, 0.2, 0.4, 1.0])
-    iglm_temp = run_settings.get("iglm_temp", 1)
+    grad_merge_method = run_settings.get("grad_merge_method", "pcgrad")
+    iglm_scale = run_settings.get("iglm_schedule", [0.0, 0.2, 0.4, 1.0])
+    iglm_temp = run_settings.get("iglm_temp", 0.6)
     vh_len= run_settings.get("vh_len", 0)
     vh_first= run_settings.get("vh_first", True)
     vl_len= run_settings.get("vl_len", 0)
@@ -95,7 +95,7 @@ def germinal_design(
         "i_ptm": run_settings.get("i_ptm_threshold", 0.65),
         "i_pae": run_settings.get("i_pae_threshold", 0.3),
     }
-    seq_init_mode = run_settings.get("seq_init_mode", None)
+    seq_init_mode = run_settings.get("seq_init_mode")
     starting_binder_seq = run_settings.get("starting_binder_seq", None)
     normalize_gradient = run_settings.get("normalize_gradient", True)
     linear_lr_annealing = run_settings.get("linear_lr_annealing", False)
@@ -163,7 +163,7 @@ def germinal_design(
         use_pos_distance=use_pos_distance,
         rm_template_ic=True,
         sequence=sequence,
-        rm_aa=run_settings.get("omit_AAs", None),
+        rm_aa=run_settings.get("omit_AAs", ""),
         starting_binder_seq=starting_binder_seq,
         mode=seq_init_mode,
         lens={
@@ -221,11 +221,11 @@ def germinal_design(
 
     # Apply helicity loss to promote alpha-helical secondary structure
     if (pos is not None and pos != "") and run_settings.get("use_helix_loss", True):
-        weights_helix = run_settings.get("weights_helix", 0)
+        weights_helix = run_settings.get("weights_helix", 0.1)
         add_helix_loss(af_model, weights_helix)
 
     if (pos is not None and pos != "") and run_settings.get("use_beta_loss", True):
-        beta_strand_weight = run_settings.get("weights_beta", 0.0)
+        beta_strand_weight = run_settings.get("weights_beta", 0.1)
         if run_settings.get("beta_loss_type", "strand") == "sheet":
             add_beta_sheet_loss(af_model, cdr_lengths, beta_strand_weight)
         else:
@@ -402,7 +402,7 @@ def germinal_design(
 
     ### get the sampled sequence for plotting
     af_model.get_seqs()
-    if run_settings.get("save_design_trajectory_plots", True):
+    if run_settings.get("save_design_trajectory_plots", False):
         log_trajectory(af_model, design_name, io)
         plot_trajectory(af_model, design_name, io)
         # also save animated visualisations of PSSM / gradient evolution

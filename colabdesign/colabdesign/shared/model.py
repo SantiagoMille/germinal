@@ -60,15 +60,7 @@ class design_model:
     else:
       b = np.array(np.broadcast_to(bias, shape[1:]))
 
-    pos_idx = self.opt["pos"] - self._target_len
-    
-    # disable certain amino acids by subtracting a huge number
-    if rm_aa is not None and rm_aa is not False:
-      for aa in rm_aa.split(","):
-        if getattr(self, "binder_redesign", False) and pos_idx is not None and len(pos_idx) > 0:
-          b[pos_idx,..., aa_order[aa]] -= 1e6
-        else:
-          b[..., aa_order[aa]] -= 1e6   
+    pos_idx = self.opt["pos"] - self._target_len  
 
     # use wildtype sequence
     if ("wildtype" in mode or "wt" in mode) and hasattr(self,"_wt_aatype"):
@@ -128,6 +120,14 @@ class design_model:
       if bias_redesign is not False:
         b = b + (x[0] * bias_redesign)  # x is one-hot so b = bias_redesign in the position of AA
         b[pos_idx,:] = np.zeros(b[pos_idx,:].shape)
+
+    # disable certain amino acids by subtracting a huge number
+    if rm_aa is not None and rm_aa is not False:
+      for aa in rm_aa.split(","):
+        if getattr(self, "binder_redesign", False) and pos_idx is not None and len(pos_idx) > 0:
+          b[pos_idx,..., aa_order[aa]] -= 1e6
+        else:
+          b[..., aa_order[aa]] -= 1e6 
 
     # Apply Gumbel noise if specified
     if "gumbel" in mode:
