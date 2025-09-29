@@ -13,6 +13,11 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
 
 - We strongly recommend use of [AF3](https://github.com/google-deepmind/alphafold3) for design filtering as done in the paper, as filters are only calibrated for AF3 confidence metrics. We are actively working to add Chai calibrated thresholds for commercial users. Until then, running Germinal with `structure_model: "chai"` and not`structure_model: "af3"` should be considered experimental and may have lower passing rates.
 - While nanobody design is fully functional, we are still working on calibrating weightings and filters for scFv, so that functionality should still be also be considered experimental.
+- As recommended in the preprint, we suggest performing a small parameter sweep before launching full sampling runs. This is especially important when working with a new target or selecting a new epitope. In `configs/run/vhh_paper.yaml` and `configs/run/scfv_paper.yaml`, we provide the parameters that we used for PD-L1 nanobody generation in our paper. In `configs/run/vhh.yaml` and `configs/run/scfv.yaml` we provide a set of reasonable default parameters to use as a starting point for parameter sweep experiments. Parameters can be configured from the command line, for example, you can set `weights_beta` and `weights_plddt` with the following command:
+
+```bash
+python run_germinal.py weights_beta=0.3 weights_plddt: 1.0
+```
 
 ## Contents
 
