@@ -354,7 +354,7 @@ If you use components of this pipeline, please also cite the underlying methods:
 - **Chai-1**: [https://github.com/chaidiscovery/chai-lab](https://github.com/chaidiscovery/chai-lab)
 - **AlphaFold3**: [https://github.com/google-deepmind/alphafold3](https://github.com/google-deepmind/alphafold3)
 - **AbMPNN**: [Dreyer, F. A., Cutting, D., Schneider, C., Kenlay, H. & Deane, C. M. Inverse folding for
-antibody sequence design using deep learning. (2023).](https://www.biorxiv.org/content/10.1101/2025.05.09.653228v1.full.pdf)
+antibody sequence design using deep learning. (2023).](https://arxiv.org/pdf/2310.19513)
 - **PyRosetta**: [https://www.pyrosetta.org/](https://www.pyrosetta.org/)
 
 <!-- TOC --><a name="community-acknowledgments"></a>
