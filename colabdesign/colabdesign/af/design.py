@@ -348,7 +348,7 @@ class _af_design:
       #MGDA to combine two, diff objective gradients
       w_opt, g_combined = mgda([self.aux["grad"]["seq"], scaled_iglm_grad])
       self.aux["log"]["af_grad"] = np.array(self.aux["grad"]["seq"] * w_opt[0])
-      self.aux["log"]["iglm_grad"] = np.array([scaled_normalized_grad * w_opt[1]])
+      self.aux["log"]["iglm_grad"] = np.array([scaled_iglm_grad * w_opt[1]])
       self.aux["grad"]["seq"] = g_combined
     elif self.opt["grad_merge_method"]['pcgrad']:
       #PCGrad to combine two, diff objective gradients

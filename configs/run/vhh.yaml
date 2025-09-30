@@ -19,8 +19,8 @@ weights_iptm: 0.75
 weights_con_intra: 0.1
 weights_con_inter: 0.2
 weights_rg: 0.1
-weights_helix: 0.0
-weights_beta: 0.0
+weights_helix: 0.1
+weights_beta: 0.25
 
 intra_contact_distance: 14.0
 inter_contact_distance: 20.0
@@ -41,8 +41,7 @@ seq_entropy_threshold: 0.10
 
 # IgLM settings
 grad_merge_method: "pcgrad"
-iglm_scale: [0.0, 0.2, 0.4, 1.0]
-update_rounds: 10
+iglm_scale: [0.2, 0.4, 0.4, 1.0]
 iglm_temp: 0.6
 iglm_species: "[HUMAN]"
 seq_init_mode: ["gumbel", "soft"]  # STATIC: Fixed list, no argparse option

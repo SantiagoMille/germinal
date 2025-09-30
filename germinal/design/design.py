@@ -84,7 +84,6 @@ def germinal_design(
     sequence = run_settings.get("sequence", None)
     grad_merge_method = run_settings.get("grad_merge_method", "scale")
     iglm_scale = run_settings.get("iglm_schedule", [0, 0.2, 0.4, 1.0])
-    update_rounds = run_settings.get("update_rounds", 1)
     iglm_temp = run_settings.get("iglm_temp", 1)
     vh_len= run_settings.get("vh_len", 0)
     vh_first= run_settings.get("vh_first", True)
@@ -124,7 +123,6 @@ def germinal_design(
                 "mgda": grad_merge_method == "mgda",
             },
             iglm_scale=iglm_scale,
-            update_rounds=update_rounds,
             norm_seq_grad=normalize_gradient,
             linear_lr_annealing=linear_lr_annealing,
             min_lr_scale=min_lr_scale,
