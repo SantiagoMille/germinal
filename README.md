@@ -11,6 +11,14 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
 
 **⚠️ We are still actively working on code improvements.**
 
+- We strongly recommend use of [AF3](https://github.com/google-deepmind/alphafold3) for design filtering as done in the paper, as filters are only calibrated for AF3 confidence metrics. We are actively working to add Chai calibrated thresholds for commercial users. Until then, running Germinal with `structure_model: "chai"` and not`structure_model: "af3"` should be considered experimental and may have lower passing rates.
+- While nanobody design is fully functional, we are still working on calibrating weightings and filters for scFv, so that functionality should still be also be considered experimental.
+- As recommended in the preprint, we suggest performing a small parameter sweep before launching full sampling runs. This is especially important when working with a new target or selecting a new epitope. In `configs/run/vhh_paper.yaml` and `configs/run/scfv_paper.yaml`, we provide the parameters that we used for PD-L1 nanobody generation in our paper. In `configs/run/vhh.yaml` and `configs/run/scfv.yaml` we provide a set of reasonable default parameters to use as a starting point for parameter sweep experiments. Parameters can be configured from the command line, for example, you can set `weights_beta` and `weights_plddt` with the following command:
+
+```bash
+python run_germinal.py weights_beta=0.3 weights_plddt: 1.0
+```
+
 ## Contents
 
 <!-- TOC -->
@@ -18,6 +26,7 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
 - [Setup](#setup)
    * [Requirements](#requirements)
    * [Installation](#installation)
+   * [Docker](#docker)
 - [Usage](#usage)
    * [Quick Start](#quick-start)
       + [Configuration Structure](#configuration-structure)
@@ -27,8 +36,10 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
    * [Filters Configuration](#filters-configuration)
 - [Output Format](#output-format)
 - [Tips for Design](#tips-for-design)
+- [Bugfix Changelog](#bugfix-changelog)
 - [Citation](#citation)
 - [Acknowledgments](#acknowledgments)
+- [Community Acknowledgments](#community-acknowledgments)
 
 <!-- TOC -->
 
@@ -46,8 +57,11 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
 
 **System Requirements:**
 - **GPU**: NVIDIA GPU with CUDA support
-- **Memory**: 80GB+ VRAM
+- **Memory**: 40GB+ VRAM*
 - **Storage (recommended)**: 50GB+ space for results
+
+> *The pipeline has been tested on: A100 40GB, H100 40GB MIG, L40S 48GB, A100 80GB, and H100 80GB.
+> These runs tested a 130 amino acid target with a 131 amino acid nanobody. For larger runs, we recommend 60GB+ VRAM.
 
 <!-- TOC --><a name="installation"></a>
 ### Installation
@@ -63,7 +77,7 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
 4. Copy AlphaFold-Multimer parameters to `params/` and untar them. 
    Alternatively, you can run the following lines inside `params/` to download and untar:
    ```bash
-   aria2c -q -x 16 https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar
+   aria2c -x 16 https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar
    tar -xf alphafold_params_2022-12-06.tar -C .
    ```
 
@@ -79,6 +93,37 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
 
 Notes:
 - AlphaFold-Multimer and AlphaFold3 parameters are large and must be downloaded manually.
+
+<!-- TOC --><a name=docker"></a>
+### Docker
+Germinal can be run using Docker:
+
+```bash
+docker build -t germinal .
+docker run -it --rm --gpus all \
+  -v "$PWD/results:/workspace/results" \
+  -v "$PWD/pdbs:/workspace/pdbs" \
+  germinal bash
+```
+
+and Singularity (shown)/Apptainer:
+```bash
+mkdir -p results
+singularity pull germinal.sif docker://jwang003/germinal:latest
+singularity shell --nv \
+  --bind "$PWD/results:/workspace/results" \
+  --bind "$PWD/pdbs:/workspace/pdbs" \
+  --pwd /workspace \
+  germinal.sif
+```
+> **Note:** Pulling may hang on `Creating SIF file...` If so, check if the command is done with `singularity exec germinal.sif python -c "print('ok')"`
+
+Volumes are mounted to save generated input complexes and results from sampling.
+
+Once inside the container:
+```bash
+python run_germinal.py
+```
 
 <!-- TOC --><a name="usage"></a>
 ## Usage
@@ -263,13 +308,22 @@ runs/your_target_nb_20240101_120000/
 - `all_trajectories.csv` - Complete list of designs that passed hallucination, their *in silico* metrics, which stage they reached, and the pdb path to the designed structure.
 
 <!-- TOC --><a name="tips-for-design"></a>
-## Tips for Design
+## Important Notes and Tips for Design
 
-Hallucination is inherently expensive. Designing against a 130 residue target takes anywhere from 3-8 minutes for a nanobody design iteration, depending on which stage the hallucinated sequence reaches. For scFvs, this number is around 50% larger.
+Hallucination is inherently expensive. Designing against a 130 residue target takes anywhere from 2-8 minutes for a nanobody design iteration on an H100 80GB GPU, depending on which stage the designed sequence reaches. For 40GB GPUs or scFvs, this number is around 50% larger.
 
-During sampling, we typically run antibody generation until there are around 1,000 passing designs against the specified target. Of those, we typically select the top 40-50 sequences for experimental testing based on a combination of *in silico* metrics described in the preprint. While *in silico* success rates vary wildly across targets, we estimate that 200-300 H100 80GB GPU hours of sampling are typically enough to discover some functional antibodies. 
+During sampling, we typically run antibody generation until there are around 1,000 passing designs against the specified target and observe a success rate of around 0.5 - 1 per GPU hour. Of those, we typically select the top 40-50 sequences for experimental testing based on a combination of *in silico* metrics described in the preprint. While *in silico* success rates vary wildly across targets, we estimate that 200-400 H100 80GB GPU hours of sampling are typically enough to generate ~200 successful designs and some functional antibodies. 
+
+Best design parameters are different for each target and antibody type! If you are experiencing low success rates, we recommend tweaking interface confidence weights (ipTM / iPAE), structure-based weights (helix, beta, framework loss), or the IgLM weights defined in `iglm_scale`. Filters are easily changeable in the filters configurations. To add or remove filters from the initial and final filtering rounds, simply create a new filter with the same name as the intended metric and specify the threshold value and the operator (<, >, =, etc).
 
 More tips coming soon!
+
+<!-- TOC --><a name="bugfix-changelog"></a>
+## Bugfix Changelog
+
+- 9/25/25: Import fix for local colabdesign module ([commit 8b5b655](https://github.com/SantiagoMille/germinal/commit/8b5b655), [pr #8](https://github.com/SantiagoMille/germinal/pull/8)) 
+- 9/25/25: A metric meant for tracking purposes `external_i_pae` was erroneously set to be used as a filter ([commit 49be2e9](https://github.com/SantiagoMille/germinal/commit/49be2e9), [issue #7](https://github.com/SantiagoMille/germinal/issues/7))
+- 9/26/25: Resolved an error which caused passing runs to crash at the final stage due to a misnamed variable ([commit 9292e1e](https://github.com/SantiagoMille/germinal/commit/9292e1e), [issue #11](https://github.com/SantiagoMille/germinal/issues/11))
 
 <!-- TOC --><a name="citation"></a>
 ## Citation
@@ -300,8 +354,13 @@ If you use components of this pipeline, please also cite the underlying methods:
 - **Chai-1**: [https://github.com/chaidiscovery/chai-lab](https://github.com/chaidiscovery/chai-lab)
 - **AlphaFold3**: [https://github.com/google-deepmind/alphafold3](https://github.com/google-deepmind/alphafold3)
 - **AbMPNN**: [Dreyer, F. A., Cutting, D., Schneider, C., Kenlay, H. & Deane, C. M. Inverse folding for
-antibody sequence design using deep learning. (2023).](https://www.biorxiv.org/content/10.1101/2025.05.09.653228v1.full.pdf)
+antibody sequence design using deep learning. (2023).](https://arxiv.org/pdf/2310.19513)
 - **PyRosetta**: [https://www.pyrosetta.org/](https://www.pyrosetta.org/)
+
+<!-- TOC --><a name="community-acknowledgments"></a>
+## Community Acknowledgments
+
+- [@cytokineking](https://github.com/cytokineking) — for helping raise numerous bugs to our attention
 
 ## License
 

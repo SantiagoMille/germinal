@@ -1,17 +1,17 @@
 # @package _global_
-# VHH (nanobody) run configuration
+# scFv run configuration
 
 # General run settings
-type: "nb"
-cdr_lengths: [11, 8, 18]
-fw_lengths: [25,17,38,14]
+type: "scfv"
+cdr_lengths: [8, 8, 13, 6, 6, 9] # heavy, then light
+fw_lengths: [25,17,38,52,17,33,10]
 pregenerate_seeds: false
-vh_first: null # not needed for nanobodies
-vh_len: null # not needed for nanobodies  
-vl_len: null # not needed for nanobodies
+vh_first: true
+vh_len: 120
+vl_len: 108
 
 # Loss function parameters
-weights_plddt: 1.0
+weights_plddt: 0.5
 weights_i_plddt: 1.0
 weights_pae_intra: 0.1
 weights_pae_inter: 0.5
@@ -20,7 +20,7 @@ weights_con_intra: 0.1
 weights_con_inter: 0.2
 weights_rg: 0.1
 weights_helix: 0.1
-weights_beta: 0.2
+weights_beta: 0.1
 
 intra_contact_distance: 14.0
 inter_contact_distance: 20.0
@@ -30,18 +30,18 @@ framework_contact_loss: true
 framework_contact_offset: 1
 
 # Hallucination settings
-logits_steps: 65
+logits_steps: 60
 softmax_steps: 35
 search_steps: 10
 search_mutation_rate: 0.05
-plddt_threshold: 0.82
-i_ptm_threshold: 0.68
-i_pae_threshold: 0.27
+plddt_threshold: 0.8
+i_ptm_threshold: 0.65
+i_pae_threshold: 0.3
 seq_entropy_threshold: 0.10
 
 # IgLM settings
 grad_merge_method: "pcgrad"
-iglm_scale: [0.2, 0.4, 0.4, 1.0]
+iglm_scale: [0.1, 0.2, 0.4, 1.0]
 iglm_temp: 0.6
 iglm_species: "[HUMAN]"
 seq_init_mode: ["gumbel", "soft"]  # STATIC: Fixed list, no argparse option
@@ -59,7 +59,7 @@ model_path: "abmpnn"
 mpnn_weights: "abmpnn"
 
 # Structure prediction settings
-structure_model: "chai"
+structure_model: "af3"
 msa_mode: "target"
 
 # AF3 configuration (required when structure_model == "af3")
@@ -84,13 +84,14 @@ rm_binder_sc: true
 learning_rate: 0.1
 optimizer: "sgd"
 normalize_gradient: true
-linear_lr_annealing: false
-min_lr_scale: 0.01
+linear_lr_annealing: true
+min_lr_scale: 0.25
 use_multimer_design: true
 sample_models: true
 num_models: 1
 num_recycles_design: 3
 recycle_mode: "last"
+soft_iterations: 60
 
 # Other loss settings
 use_helix_loss: true
@@ -102,7 +103,7 @@ use_i_ptm_loss: true
 
 # File management settings
 save_design_animations: false
-save_design_trajectory_plots: true
+save_design_trajectory_plots: false
 
 # Other settings
 omit_AAs: "C"

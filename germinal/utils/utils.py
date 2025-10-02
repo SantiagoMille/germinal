@@ -147,7 +147,7 @@ def clean_pdb(pdb_file):
         f_out.writelines(relevant_lines)
 
 
-def clear_memory():
+def clear_memory(clear_jax: bool = True):
     """Clear GPU and system memory caches for optimal performance.
     
     Performs comprehensive memory cleanup including Python garbage collection,
@@ -163,7 +163,8 @@ def clear_memory():
         pass
 
     try:
-        jax.clear_caches()
+        if clear_jax:
+            jax.clear_caches()
     except Exception:
         print("Warning: JAX cache not cleared because it is not available")
         pass

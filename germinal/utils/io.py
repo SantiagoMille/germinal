@@ -568,7 +568,7 @@ class IO:
             else:
                 # Only keep columns common to both the new row and the existing file
                 existing_df = pd.read_csv(self.layout.all_csv)
-                common_columns = set(trajectory_df.columns) & set(existing_df.columns)
+                common_columns = [c for c in trajectory_df.columns if c in existing_df.columns]
                 if not common_columns:
                     # If no common columns, just append all columns of the new row
                     updated_all_trajectories_df = pd.concat(
