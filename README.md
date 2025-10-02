@@ -11,12 +11,12 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
 
 **⚠️ We are still actively working on code improvements.**
 
-- We strongly recommend use of [AF3](https://github.com/google-deepmind/alphafold3) for design filtering as done in the paper, as filters are only calibrated for AF3 confidence metrics. We are actively working to add Chai calibrated thresholds for commercial users. Until then, running Germinal with `structure_model: "chai"` and not`structure_model: "af3"` should be considered experimental and may have lower passing rates.
-- While nanobody design is fully functional, we are still working on calibrating weightings and filters for scFv, so that functionality should still be also be considered experimental.
-- As recommended in the preprint, we suggest performing a small parameter sweep before launching full sampling runs. This is especially important when working with a new target or selecting a new epitope. In `configs/run/vhh_paper.yaml` and `configs/run/scfv_paper.yaml`, we provide the parameters that we used for PD-L1 nanobody generation in our paper. In `configs/run/vhh.yaml` and `configs/run/scfv.yaml` we provide a set of reasonable default parameters to use as a starting point for parameter sweep experiments. Parameters can be configured from the command line, for example, you can set `weights_beta` and `weights_plddt` with the following command:
+- We strongly recommend use of [AF3](https://github.com/google-deepmind/alphafold3) for design filtering as done in the paper, as **filters are only calibrated for AF3 confidence metrics**. We are actively working to add Chai calibrated thresholds for commercial users. Until then, running Germinal with `structure_model: "chai"` and NOT `structure_model: "af3"` should be considered experimental and may have lower passing rates.
+- While nanobody design is fully functional and validated experimentally, the configs and filters for scFvs remain preliminary; this functionality should therefore still be regarded as experimental.
+- As recommended in the preprint, we suggest performing a small parameter sweep before launching full sampling runs. This is especially important when working with a new target or selecting a new epitope. In `configs/run/vhh_pdl1.yaml` and `configs/run/vhh_il3.yaml`, we provide the parameters that we used for PD-L1 and IL3 nanobody generations in the pre-print. We also include the filters used for these runs under `configs/filter/initial/` and `configs/filter/final/`. In `configs/run/vhh.yaml` and `configs/run/scfv.yaml` we provide a set of reasonable default parameters that we used as a starting point for parameter exploration and sweep experiments (see below **Important Notes and Tips for Design** for more details). Note that final sampling runs in the preprint all used slightly modified parameters. Parameters can be configured from the command line. For example, you can set `weights_beta` and `weights_plddt` with the following command:
 
 ```bash
-python run_germinal.py weights_beta=0.3 weights_plddt: 1.0
+python run_germinal.py weights_beta=0.3 weights_plddt=1.0
 ```
 
 ## Contents
@@ -36,6 +36,7 @@ python run_germinal.py weights_beta=0.3 weights_plddt: 1.0
    * [Filters Configuration](#filters-configuration)
 - [Output Format](#output-format)
 - [Tips for Design](#tips-for-design)
+- [Designing against PD-L1 and IL3](#design-against-pdl1-il3)
 - [Bugfix Changelog](#bugfix-changelog)
 - [Citation](#citation)
 - [Acknowledgments](#acknowledgments)
@@ -72,7 +73,7 @@ python run_germinal.py weights_beta=0.3 weights_plddt: 1.0
    ```
 2. Install Miniconda or Anaconda if not already available.
 
-3. Follow the instructions in `environment_setup.md`
+3. Follow the **instructions** in `environment_setup.md`
 
 4. Copy AlphaFold-Multimer parameters to `params/` and untar them. 
    Alternatively, you can run the following lines inside `params/` to download and untar:
@@ -120,7 +121,7 @@ singularity shell --nv \
 
 Volumes are mounted to save generated input complexes and results from sampling.
 
-Once inside the container:
+Once inside the container you can test:
 ```bash
 python run_germinal.py
 ```
@@ -141,7 +142,7 @@ These detailed options are stored in four main settings files:
  - **Final filters**: `configs/filters/final/default.yaml`
 
 <!-- TOC --><a name="configuration-structure"></a>
-#### Configuration Structure
+#### Configuration Structure (example)
 
 ```
 configs/
@@ -157,19 +158,20 @@ configs/
     └── final/
         ├── default.yaml     # Final acceptance filters
         └── scfv.yaml        # Final filters for scfv runs
-```
+``` 
 
-In general, the main run settings and filters should stay the same and can be run as defaults unless you are experimenting. To design nanobodies targeting PD-L1, simply run:
+To design nanobodies targeting PD-L1 using default configs:
 
 ```bash
 python run_germinal.py
 ```
 
-To design scFvs targeting PD-L1, run:
+To design scFvs targeting PD-L1 using default configs:
 
 ```bash
-python run_germinal.py run=scfv filter.initial=scfv
+python run_germinal.py run=scfv filter/initial=scfv filter/final=scfv
 ```
+> **Note:** Default configs are not meant to work out of the box but rather be a set of reasonable default parameters that we used as a starting point for parameter exploration and sweep experiments.
 
 If you wish to change the configuration of runs, you can:
 
@@ -180,14 +182,14 @@ If you wish to change the configuration of runs, you can:
 <!-- TOC --><a name="basic-usage"></a>
 ### Basic Usage
 
-**Run with defaults (VHH + PDL1 + default filters):**
+**Run with defaults:**
 ```bash
 python run_germinal.py
 ```
 
-**Switch to scFv:**
+**Switch to a different run config (e.g., new_config):**
 ```bash
-python run_germinal.py run=scfv
+python run_germinal.py run=new_config
 ```
 
 **Use different target:**
@@ -200,13 +202,17 @@ python run_germinal.py target=my_target
 python run_germinal.py --config_name new_config.yaml
 ```
 
+**Use different filters:**
+```bash
+python run_germinal.py filter/initial=new_init_filter filter/final=new_final_filter
+```
+
 <!-- TOC --><a name="cli-overrides"></a>
 ### CLI Overrides
 
 Hydra provides powerful CLI override capabilities. You can override any parameter in any configuration file.
 
-> [!NOTE]
-> Settings in `configs/run/` folder use the global namespace and do not need a `run` prefix before overriding. See example below.
+> **!NOTE** Settings in `configs/run/` folder use the global namespace and do not need a `run` prefix before overriding. See example below.
 
 **Basic parameter overrides:**
 ```bash
@@ -235,10 +241,10 @@ python run_germinal.py filter.final.sc_rmsd.operator='<=' filter.final.sc_rmsd.v
 **Target configuration overrides:**
 ```bash
 # Change target hotspots
-python run_germinal.py target.target_hotspots="A26,A30,A36,A44"
+python run_germinal.py target.target_hotspots=\'A26,A30,A36,A44\'
 
 # Use different PDB file
-python run_germinal.py target.target_pdb_path="pdbs/my_target.pdb" target.target_name="my_target"
+python run_germinal.py target.target_pdb_path=\'pdbs/my_target.pdb\' target.target_name=\'my_target\'
 ```
 
 **Complex multi-parameter overrides:**
@@ -248,8 +254,8 @@ python run_germinal.py \
   run=scfv \
   target=pdl1 \
   max_trajectories=500 \
-  experiment_name="scfv_pdl1_test" \
-  target.target_hotspots="A37,A39,A41" \
+  experiment_name=\'scfv_pdl1_test\' \
+  target.target_hotspots=\'A37,A39,A41\' \
   filter.final.external_plddt.value=0.85 \
   weights_iptm=1.0
 ```
@@ -275,10 +281,17 @@ length: 133
 
 There are two sets of filters: post-hallucination (initial) filters and final filters. The post-hallucination filters are applied after the hallucination step to determine which sequences to proceed to the redesign step. This filter set is a subset of the final filters, which is applied at the end of the pipeline to determine passing antibody sequences. Here is an example of the post-hallucination filters:
 ```yaml
-clashes: {'value': 1, 'operator': '<'}
-cdr3_hotspot_contacts: {'value': 0, 'operator': '>'}
-percent_interface_cdr: {'value': 0.5, 'operator': '>'}
-interface_shape_comp: {'value': 0.6, 'operator': '>'}
+clashes:
+  value: 1
+  operator: '<'
+
+sc_rmsd:
+  value: 7.0
+  operator: '<'
+
+binder_near_hotspot:
+  value: true
+  operator: '=='
 ```
 
 <!-- TOC --><a name="output-format"></a>
@@ -312,11 +325,55 @@ runs/your_target_nb_20240101_120000/
 
 Hallucination is inherently expensive. Designing against a 130 residue target takes anywhere from 2-8 minutes for a nanobody design iteration on an H100 80GB GPU, depending on which stage the designed sequence reaches. For 40GB GPUs or scFvs, this number is around 50% larger.
 
-During sampling, we typically run antibody generation until there are around 1,000 passing designs against the specified target and observe a success rate of around 0.5 - 1 per GPU hour. Of those, we typically select the top 40-50 sequences for experimental testing based on a combination of *in silico* metrics described in the preprint. While *in silico* success rates vary wildly across targets, we estimate that 200-400 H100 80GB GPU hours of sampling are typically enough to generate ~200 successful designs and some functional antibodies. 
+During sampling, we typically run antibody generation until there are around 1,000 passing designs against the specified target and observe a success rate of around ~1 per GPU hour. Of those, we typically select the top 40-50 sequences for experimental testing based on a combination of *in silico* metrics described in the preprint. While *in silico* success rates vary wildly across targets, we estimate that 200-400 H100 80GB GPU hours of sampling are typically enough to generate ~200 successful designs and some functional antibodies. 
 
-Best design parameters are different for each target and antibody type! If you are experiencing low success rates, we recommend tweaking interface confidence weights (ipTM / iPAE), structure-based weights (helix, beta, framework loss), or the IgLM weights defined in `iglm_scale`. Filters are easily changeable in the filters configurations. To add or remove filters from the initial and final filtering rounds, simply create a new filter with the same name as the intended metric and specify the threshold value and the operator (<, >, =, etc).
+**Tweaking Parameters:**
+
+Optimal design parameters are different for each target and antibody type! If you are experiencing low success rates, we recommend tweaking interface confidence weights (ipTM / iPAE), structure-based weights (helix, beta, framework loss), or the IgLM weights defined in `iglm_scale`.  In particular we recommend playing around with:
+
+```python
+weights_plddt: 1.0
+weights_pae_inter: 0.5
+weights_iptm: 0.7
+weights_helix: 0.1
+weights_beta: 0.1
+framework_contact_offset: 1
+```
+
+`iglm_scale` is a key parameter that controls the influence of IgLM during different stages of the design process. `iglm_scale` is defined as a list of four scalar values: `[v_1,v_2,v_3,v_4]`. During the logits phase, iglm_scale increases linearly between v_1 and v_2. During the softmax phase, iglm_scale takes the value of v_3, and during the semi-greedy stage iglm_scale takes the value of v_4. 
+
+Filters are also easily changeable in the filters configurations. To add or remove filters from the initial and final filtering rounds, simply create a new filter with the same name as the intended metric and specify the threshold value and the operator (<, >, =, etc).
+
+Finally, using omit_AAs (e.g., `omit_AAs: "C,A"`), you can now omit any amino acid from appearing in the CDRs, opposed to all of the protein.
+
+An example of a param sweep could be:
+
+```bash
+python run_germinal.py weights_beta=0.1 weights_helix=0.1 weights_plddt=1.0 experiment_name=beta01-helix01-plddt1
+
+python run_germinal.py weights_beta=0.3 weights_helix=0.2 weights_plddt=1.5 experiment_name=beta03-helix02-plddt1.5
+...
+```
 
 More tips coming soon!
+
+<!-- TOC --><a name="design-against-pdl1-il3"></a>
+## Designing against PD-L1 and IL3
+
+PD-L1 VHH working config:
+```bash
+python -u run_germinal.py run=vhh_pdl1 experiment_name=pdl1_vhh filter/initial=vhh_pdl1 filter/final=vhh_pdl1 target=pdl1
+```
+
+IL3 VHH working config:
+```bash
+python -u run_germinal.py run=vhh_il3 experiment_name=il3_vhh filter/initial=vhh_il3 filter/final=vhh_il3 target=il3
+```
+
+PD-L1 scFV (not experimentally validated yet) config:
+```bash
+python -u run_germinal.py run=scfv_pdl1 experiment_name=pdl1_scfv filter/initial=scfv_pdl1 filter/final=scfv_pdl1 target=pdl1
+```
 
 <!-- TOC --><a name="bugfix-changelog"></a>
 ## Bugfix Changelog
@@ -324,6 +381,7 @@ More tips coming soon!
 - 9/25/25: Import fix for local colabdesign module ([commit 8b5b655](https://github.com/SantiagoMille/germinal/commit/8b5b655), [pr #8](https://github.com/SantiagoMille/germinal/pull/8)) 
 - 9/25/25: A metric meant for tracking purposes `external_i_pae` was erroneously set to be used as a filter ([commit 49be2e9](https://github.com/SantiagoMille/germinal/commit/49be2e9), [issue #7](https://github.com/SantiagoMille/germinal/issues/7))
 - 9/26/25: Resolved an error which caused passing runs to crash at the final stage due to a misnamed variable ([commit 9292e1e](https://github.com/SantiagoMille/germinal/commit/9292e1e), [issue #11](https://github.com/SantiagoMille/germinal/issues/11))
+- 9/28/25: Resolved an error in throwing exception for AF3 calls + added containerization support ([commit e4ca63a](https://github.com/SantiagoMille/germinal/commit/e4ca63a), [raised in pr #12](https://github.com/SantiagoMille/germinal/pull/12))
 
 <!-- TOC --><a name="citation"></a>
 ## Citation
@@ -354,7 +412,7 @@ If you use components of this pipeline, please also cite the underlying methods:
 - **Chai-1**: [https://github.com/chaidiscovery/chai-lab](https://github.com/chaidiscovery/chai-lab)
 - **AlphaFold3**: [https://github.com/google-deepmind/alphafold3](https://github.com/google-deepmind/alphafold3)
 - **AbMPNN**: [Dreyer, F. A., Cutting, D., Schneider, C., Kenlay, H. & Deane, C. M. Inverse folding for
-antibody sequence design using deep learning. (2023).](https://arxiv.org/pdf/2310.19513)
+antibody sequence design using deep learning. (2023).](https://www.biorxiv.org/content/10.1101/2025.05.09.653228v1.full.pdf)
 - **PyRosetta**: [https://www.pyrosetta.org/](https://www.pyrosetta.org/)
 
 <!-- TOC --><a name="community-acknowledgments"></a>

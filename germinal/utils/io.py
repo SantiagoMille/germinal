@@ -218,6 +218,7 @@ class Trajectory:
             **self.trajectory_metrics,
             **self.filtering_metrics,
             **self.other_metrics,
+            "final_structure_path": self.final_struct
         }
 
         return final_trajectory_info

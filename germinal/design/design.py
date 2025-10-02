@@ -82,13 +82,12 @@ def germinal_design(
     recycle_mode = run_settings.get("recycle_mode", "last")
 
     use_pos_distance = run_settings.get("use_pos_distance", True)
-    sequence = run_settings.get("sequence", None)
     grad_merge_method = run_settings.get("grad_merge_method", "pcgrad")
-    iglm_scale = run_settings.get("iglm_schedule", [0.0, 0.2, 0.4, 1.0])
-    iglm_temp = run_settings.get("iglm_temp", 0.6)
-    vh_len= run_settings.get("vh_len", 0)
-    vh_first= run_settings.get("vh_first", True)
-    vl_len= run_settings.get("vl_len", 0)
+    iglm_scale = run_settings.get("iglm_scale", [0.0, 0.2, 0.4, 1.0])
+    iglm_temp = run_settings.get("iglm_temp", 0.6) 
+    vh_len = run_settings.get("vh_len", None)
+    vh_first = run_settings.get("vh_first", True)
+    vl_len = run_settings.get("vl_len", None)
     iglm_species = run_settings.get("iglm_species", "[HUMAN]")
     dimer = target_settings.get("dimer", False)
     save_filters = {
@@ -163,7 +162,6 @@ def germinal_design(
         vh_len=vh_len,
         use_pos_distance=use_pos_distance,
         rm_template_ic=True,
-        sequence=sequence,
         rm_aa=run_settings.get("omit_AAs", ""),
         starting_binder_seq=starting_binder_seq,
         mode=seq_init_mode,

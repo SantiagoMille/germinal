@@ -27,12 +27,15 @@ def main(cfg: DictConfig):
         prelim_run_settings, target_settings
     )
 
+    io.save_run_config(run_settings, target_settings)
     # initialize pyrosetta
     pr.init(
         f"-ignore_unrecognized_res -ignore_zero_occupancy -mute all "
         f"-holes:dalphaball {run_settings['dalphaball_path']} "
         f"-corrections::beta_nov16 true -relax:default_repeats 1"
     )
+    print(f"============================\nExperiment name: {run_settings['experiment_name']}\n============================")
+    print(f"Processed config: {target_settings}\n{initial_filters}\n{final_filters}")
 
     # Initialize pre-set seeds for experiments if desired
     if run_settings["pregenerate_seeds"]:
@@ -159,7 +162,7 @@ def main(cfg: DictConfig):
             continue
 
         # ====================================================================================
-        # AbMPNN redesign - this is currently broken
+        # AbMPNN redesign
         # ====================================================================================
         print("\nStarting AbMPNN redesign...\n")
         abmpnn_sequences, abmpnn_success = redesign.run_abmpnn_redesign_pipeline(
@@ -204,6 +207,7 @@ def main(cfg: DictConfig):
                 mpnn_trajectory.set_final_struct(final_struct)
                 mpnn_trajectory.update_other_metrics(
                     {
+                        "trajectory_sequence": abmpnn_sequence["seq"],
                         "design_time": design_time,
                         "abmpnn_score": abmpnn_sequence["score"],
                         "abmpnn_seqid": abmpnn_sequence["seqid"],

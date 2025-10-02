@@ -549,9 +549,9 @@ class _af_design:
       
       lr_scale = step * ((1 - self.opt["soft"]) + (self.opt["soft"] * lr_scale_temp))
       lr_scale = max(lr_scale, self.opt["min_lr_scale"])
-
-      if sum(self.opt["iglm_scale"]) > 0:
-        if soft>=1:
+      # iglm_scale value gets calculated here based on the values set in config.yaml
+      if sum(self.opt["iglm_scale"]) >=0: 
+        if soft>=1: 
           self.opt["_iglm_scale"] = self.opt["iglm_scale"][-2]
           min_iglm_scale = self.opt["_iglm_scale"]
         else:

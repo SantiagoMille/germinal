@@ -5,8 +5,8 @@
 defaults:
   - run: vhh      
   - target: pdl1             
-  - filter/initial: default  
-  - filter/final: default  
+  - filter/initial: vhh  
+  - filter/final: vhh  
   - _self_
   - override hydra/hydra_logging: disabled  
   - override hydra/job_logging: disabled  

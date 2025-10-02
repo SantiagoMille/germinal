@@ -1,5 +1,5 @@
 # @package filter.final
-# Default final filters for scFv
+# Final filters for vhh pdl1
 # These are more stringent filters applied at the end of the pipeline
 
 # Structure metrics
@@ -8,7 +8,7 @@ clashes:
   operator: '<'
 
 sc_rmsd:
-  value: 7.0
+  value: 6.0
   operator: '<'
 
 binder_near_hotspot:
@@ -16,29 +16,29 @@ binder_near_hotspot:
   operator: '=='
 
 cdr3_hotspot_contacts:
-  value: 0
-  operator: '>'
+  value: 1
+  operator: '>='
 
 percent_interface_cdr:
-  value: 0.7
-  operator: '>'
+  value: 0.5
+  operator: '>='
 
 interface_shape_comp:
-  value: 0.5
-  operator: '>'
+  value: 0.6
+  operator: '>='
 
 interface_hbonds:
-  value: 6
+  value: 3
   operator: '>='
 
 # Hydrophobicity metrics
 surface_hydrophobicity:
-  value: 0.42
-  operator: '<'
+  value: 0.4
+  operator: '<='
 
 interface_hydrophobicity:
   value: 45
-  operator: '>'
+  operator: '>='
 
 # Confidence metrics
 pdockq2:
@@ -46,15 +46,15 @@ pdockq2:
   operator: '>'
 
 external_plddt:
-  value: 0.85
-  operator: '>'
+  value: 0.80
+  operator: '>='
 
 external_iptm:
-  value: 0.74
-  operator: '>'
+  value: 0.75
+  operator: '>='
 
 external_ptm:
-  value: 0.84
+  value: 0.8
   operator: '>='
 
 external_pae:
