@@ -344,7 +344,7 @@ framework_contact_offset: 1
 
 Filters are also easily changeable in the filters configurations. To add or remove filters from the initial and final filtering rounds, simply create a new filter with the same name as the intended metric and specify the threshold value and the operator (<, >, =, etc).
 
-Finally, using omit_AAs (e.g., `omit_AAs: "C,A"`), you can now omit any amino acid from appearing in the CDRs, opposed to all of the protein.
+Finally, using omit_AAs - e.g. `omit_AAs: "C,A"` in the yaml or `omit_AAs="'C,A'"` in the command line (note the double quotation for hydra) - allows one to omit any amino acid from appearing in the CDRs, opposed to all of the protein.
 
 An example of a param sweep could be:
 
