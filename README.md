@@ -435,7 +435,9 @@ antibody sequence design using deep learning. (2023).](https://www.biorxiv.org/c
 <!-- TOC --><a name="community-acknowledgments"></a>
 ## Community Acknowledgments
 
-- [@cytokineking](https://github.com/cytokineking) — for helping raise numerous bugs to our attention
+- [@cytokineking](https://github.com/cytokineking) - for helping identify issues with initial versions of the codebase
+- [@shindo687](https://github.com/shindo687) - for helping ensure proper hyperlinks to supporting papers in the README
+- [@azam-huss](https://github.com/azam-huss) - for helping consolidate the config arguments
 
 ## License
 
