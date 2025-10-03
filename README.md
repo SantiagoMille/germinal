@@ -148,16 +148,18 @@ These detailed options are stored in four main settings files:
 configs/
 ├── config.yaml              # Main configuration yaml
 ├── run/                     # Main run settings
-│   ├── vhh.yaml             # VHH (nanobody) specific settings
-│   └── scfv.yaml            # scFv specific settings
+│   ├── vhh.yaml             # Example VHH (nanobody) settings
+│   └── ...            		 # Other settings
 ├── target/                  # Target protein configurations
-│   └── pdl1.yaml            # PDL1 target example
+│   ├── pdl1.yaml            # PDL1 target example
+│   └── ...             	 # other targets
 └── filter/                  # Filter configurations
     ├── initial/
-    │   └── default.yaml     # Post-hallucination (initial) filters
+    │   ├── vhh.yaml     	 # Post-hallucination (initial) filters
+    │   └── ...
     └── final/
-        ├── default.yaml     # Final acceptance filters
-        └── scfv.yaml        # Final filters for scfv runs
+        ├── vhh.yaml     	 # Final acceptance filters
+        └── ...        
 ``` 
 
 To design nanobodies targeting PD-L1 using default configs:
@@ -171,7 +173,7 @@ To design scFvs targeting PD-L1 using default configs:
 ```bash
 python run_germinal.py run=scfv filter/initial=scfv filter/final=scfv
 ```
-> **Note:** Default configs are not meant to work out of the box but rather be a set of reasonable default parameters that we used as a starting point for parameter exploration and sweep experiments.
+> **Note:** Default configs are not meant to work well out of the box but rather be a set of reasonable default parameters that we used as a starting point for parameter exploration and sweep experiments.
 
 If you wish to change the configuration of runs, you can:
 
@@ -360,12 +362,12 @@ More tips coming soon!
 <!-- TOC --><a name="design-against-pdl1-il3"></a>
 ## Designing against PD-L1 and IL3
 
-PD-L1 VHH working config:
+PD-L1 VHH preprint config:
 ```bash
 python -u run_germinal.py run=vhh_pdl1 experiment_name=pdl1_vhh filter/initial=vhh_pdl1 filter/final=vhh_pdl1 target=pdl1
 ```
 
-IL3 VHH working config:
+IL3 VHH preprint config:
 ```bash
 python -u run_germinal.py run=vhh_il3 experiment_name=il3_vhh filter/initial=vhh_il3 filter/final=vhh_il3 target=il3
 ```
