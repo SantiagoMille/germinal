@@ -11,9 +11,9 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
 
 **⚠️ We are still actively working on code improvements.**
 
-- We strongly recommend use of [AF3](https://github.com/google-deepmind/alphafold3) for design filtering as done in the paper, as **filters are only calibrated for AF3 confidence metrics**. We are actively working to add Chai calibrated thresholds for commercial users. Until then, running Germinal with `structure_model: "chai"` and NOT `structure_model: "af3"` should be considered experimental and may have lower passing rates.
+- We strongly recommend use of [AF3](https://github.com/google-deepmind/alphafold3) for design filtering as done in the paper, as **filters are only calibrated for AF3 confidence metrics**. We are actively working to add Chai calibrated thresholds for commercial users. Until then, running Germinal with `structure_model: "chai"` and NOT `structure_model: "af3"` should be considered experimental and may have lower passing rates. Note that the current AF3 implementation assumes singularity for containerization. We are currently working on a Docker compatible wrapper, but if you need to run AF3 with Docker in the meantime, `_run_af3` in `germinal/filters/af3.py` holds the Singularity wrapper which should only need slight tweaks to run with Docker. More details on configuring AF3 are [here](#af3).
 - While nanobody design is fully functional and validated experimentally, the configs and filters for scFvs remain preliminary; this functionality should therefore still be regarded as experimental.
-- As recommended in the preprint, we suggest performing a small parameter sweep before launching full sampling runs. This is especially important when working with a new target or selecting a new epitope. In `configs/run/vhh_pdl1.yaml` and `configs/run/vhh_il3.yaml`, we provide the parameters that we used for PD-L1 and IL3 nanobody generations in the pre-print. We also include the filters used for these runs under `configs/filter/initial/` and `configs/filter/final/`. In `configs/run/vhh.yaml` and `configs/run/scfv.yaml` we provide a set of reasonable default parameters that we used as a starting point for parameter exploration and sweep experiments (see below **Important Notes and Tips for Design** for more details). Note that final sampling runs in the preprint all used slightly modified parameters. Parameters can be configured from the command line. For example, you can set `weights_beta` and `weights_plddt` with the following command:
+- As recommended in the preprint, we suggest performing a small parameter sweep before launching full sampling runs. This is especially important when working with a new target or selecting a new epitope. In `configs/run/vhh_pdl1.yaml` and `configs/run/vhh_il3.yaml`, we provide the parameters that we used for PD-L1 and IL3 nanobody generations in the pre-print. We also include the filters used for these runs under `configs/filter/initial/` and `configs/filter/final/`. In `configs/run/vhh.yaml` and `configs/run/scfv.yaml` we provide a set of reasonable default parameters that we used as a starting point for parameter exploration and sweep experiments (see below **Important Notes and Tips for Design** for more details). One important distinction is that the structure model in the default nanobody configuration is `chai` instead of `af3` in order to allow users to run the pipeline with no additional setup. Note that final sampling runs in the preprint all used slightly modified parameters. Parameters can be configured from the command line. For example, you can set `weights_beta` and `weights_plddt` with the following command:
 
 ```bash
 python run_germinal.py weights_beta=0.3 weights_plddt=1.0
@@ -34,6 +34,7 @@ python run_germinal.py weights_beta=0.3 weights_plddt=1.0
    * [CLI Overrides](#cli-overrides)
    * [Target Configuration](#target-configuration)
    * [Filters Configuration](#filters-configuration)
+   * [AF3 Configuration](#af3)
 - [Output Format](#output-format)
 - [Tips for Design](#tips-for-design)
 - [Designing against PD-L1 and IL3](#design-against-pdl1-il3)
@@ -138,8 +139,8 @@ These detailed options are stored in four main settings files:
 
  - **Main run settings**: `configs/run/vhh.yaml`
  - **Target settings**: `configs/target/[your_target].yaml`
- - **Post-hallucination (initial) filters**: `configs/filter/initial/default.yaml`
- - **Final filters**: `configs/filters/final/default.yaml`
+ - **Post-hallucination (initial) filters**: `configs/filter/initial/[vhh/scfv].yaml`
+ - **Final filters**: `configs/filters/final/[vhh/scfv].yaml`
 
 <!-- TOC --><a name="configuration-structure"></a>
 #### Configuration Structure (example)
@@ -148,19 +149,21 @@ These detailed options are stored in four main settings files:
 configs/
 ├── config.yaml              # Main configuration yaml
 ├── run/                     # Main run settings
-│   ├── vhh.yaml             # VHH (nanobody) specific settings
-│   └── scfv.yaml            # scFv specific settings
+│   ├── vhh.yaml             # Example VHH (nanobody) settings
+│   └── ...            		 # Other settings
 ├── target/                  # Target protein configurations
-│   └── pdl1.yaml            # PDL1 target example
+│   ├── pdl1.yaml            # PDL1 target example
+│   └── ...             	 # other targets
 └── filter/                  # Filter configurations
     ├── initial/
-    │   └── default.yaml     # Post-hallucination (initial) filters
+    │   ├── vhh.yaml     	 # Post-hallucination (initial) filters
+    │   └── ...
     └── final/
-        ├── default.yaml     # Final acceptance filters
-        └── scfv.yaml        # Final filters for scfv runs
+        ├── vhh.yaml     	 # Final acceptance filters
+        └── ...        
 ``` 
 
-To design nanobodies targeting PD-L1 using default configs:
+To design nanobodies targeting PD-L1 using default configs (with `chai` as the default structure predictor):
 
 ```bash
 python run_germinal.py
@@ -171,7 +174,7 @@ To design scFvs targeting PD-L1 using default configs:
 ```bash
 python run_germinal.py run=scfv filter/initial=scfv filter/final=scfv
 ```
-> **Note:** Default configs are not meant to work out of the box but rather be a set of reasonable default parameters that we used as a starting point for parameter exploration and sweep experiments.
+> **Note:** Default configs are not meant to work well out of the box but rather be a set of reasonable default parameters that we used as a starting point for parameter exploration and sweep experiments.
 
 If you wish to change the configuration of runs, you can:
 
@@ -294,6 +297,19 @@ binder_near_hotspot:
   operator: '=='
 ```
 
+<!-- TOC --><a name="af3"></a>
+### AF3 Configuration
+
+To run AF3 in Singularity, we use 5 fields in the configuration, which are described below:
+
+```yaml
+af3_repo_path: "/path/to/alphafold3/repo"
+af3_sif_path: "/path/to/alphafold3/sif"
+af3_model_dir: "/path/to/alphafold3/weights"
+af3_db_dir: "/path/to/alphafold3/databases"
+msa_db_dir: "/path/to/colabfold/databases"
+```
+
 <!-- TOC --><a name="output-format"></a>
 ## Output Format
 
@@ -344,7 +360,7 @@ framework_contact_offset: 1
 
 Filters are also easily changeable in the filters configurations. To add or remove filters from the initial and final filtering rounds, simply create a new filter with the same name as the intended metric and specify the threshold value and the operator (<, >, =, etc).
 
-Finally, using omit_AAs (e.g., `omit_AAs: "C,A"`), you can now omit any amino acid from appearing in the CDRs, opposed to all of the protein.
+Finally, using omit_AAs - e.g. `omit_AAs: "C,A"` in the yaml or `omit_AAs="'C,A'"` in the command line (note the double quotation for hydra) - allows one to omit any amino acid from appearing in the CDRs, opposed to all of the protein.
 
 An example of a param sweep could be:
 
@@ -360,12 +376,12 @@ More tips coming soon!
 <!-- TOC --><a name="design-against-pdl1-il3"></a>
 ## Designing against PD-L1 and IL3
 
-PD-L1 VHH working config:
+PD-L1 VHH preprint config:
 ```bash
 python -u run_germinal.py run=vhh_pdl1 experiment_name=pdl1_vhh filter/initial=vhh_pdl1 filter/final=vhh_pdl1 target=pdl1
 ```
 
-IL3 VHH working config:
+IL3 VHH preprint config:
 ```bash
 python -u run_germinal.py run=vhh_il3 experiment_name=il3_vhh filter/initial=vhh_il3 filter/final=vhh_il3 target=il3
 ```
@@ -382,6 +398,7 @@ python -u run_germinal.py run=scfv_pdl1 experiment_name=pdl1_scfv filter/initial
 - 9/25/25: A metric meant for tracking purposes `external_i_pae` was erroneously set to be used as a filter ([commit 49be2e9](https://github.com/SantiagoMille/germinal/commit/49be2e9), [issue #7](https://github.com/SantiagoMille/germinal/issues/7))
 - 9/26/25: Resolved an error which caused passing runs to crash at the final stage due to a misnamed variable ([commit 9292e1e](https://github.com/SantiagoMille/germinal/commit/9292e1e), [issue #11](https://github.com/SantiagoMille/germinal/issues/11))
 - 9/28/25: Resolved an error in throwing exception for AF3 calls + added containerization support ([commit e4ca63a](https://github.com/SantiagoMille/germinal/commit/e4ca63a), [raised in pr #12](https://github.com/SantiagoMille/germinal/pull/12))
+- 10/1/25: Resolved a bug where trajectory sequence and structure path information was not updated after AbMPNN redesign. True sequence / structures can still be found in the pdb files in the `structures/` folders ([commit b45136c](https://github.com/SantiagoMille/germinal/commit/b45136c))
 
 <!-- TOC --><a name="citation"></a>
 ## Citation
@@ -418,7 +435,9 @@ antibody sequence design using deep learning. (2023).](https://www.biorxiv.org/c
 <!-- TOC --><a name="community-acknowledgments"></a>
 ## Community Acknowledgments
 
-- [@cytokineking](https://github.com/cytokineking) — for helping raise numerous bugs to our attention
+- [@cytokineking](https://github.com/cytokineking) - for helping identify issues with initial versions of the codebase
+- [@shindo687](https://github.com/shindo687) - for helping ensure proper hyperlinks to supporting papers in the README
+- [@azam-huss](https://github.com/azam-huss) - for helping consolidate the config arguments
 
 ## License
 

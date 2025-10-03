@@ -64,12 +64,12 @@ def germinal_design(
     starting_pdb = run_settings["starting_pdb_complex"]
     chain = target_settings["target_chain"]
     target_hotspot_residues = target_settings.get("target_hotspots", "")
-    length = target_settings["length"]
     design_models = run_settings.get("design_models", [0,1,2,3,4])
     
     # Unpack individual parameters from run_settings
     pos = run_settings.get("cdr_positions")
     cdr_lengths = run_settings.get("cdr_lengths")
+    fw_lengths = run_settings.get("fw_lengths")
     clear_best = run_settings.get("clear_best", True)
     bias_redesign = run_settings.get("bias_redesign", 10)
     binder_chain = target_settings.get("binder_chain", "B")
@@ -80,6 +80,8 @@ def germinal_design(
     optimizer = run_settings.get("optimizer", "sgd")
     num_models = run_settings.get("num_models", 1)
     recycle_mode = run_settings.get("recycle_mode", "last")
+
+    length = sum(fw_lengths)+sum(cdr_lengths)
 
     use_pos_distance = run_settings.get("use_pos_distance", True)
     grad_merge_method = run_settings.get("grad_merge_method", "pcgrad")
