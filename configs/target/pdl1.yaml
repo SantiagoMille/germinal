@@ -6,4 +6,3 @@ target_pdb_path: "pdbs/pdl1.pdb"
 target_chain: "A"
 binder_chain: "B"
 target_hotspots: "A37,A39,A41,A96,A98"
-length: 133
