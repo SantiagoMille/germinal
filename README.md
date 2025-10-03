@@ -384,6 +384,7 @@ python -u run_germinal.py run=scfv_pdl1 experiment_name=pdl1_scfv filter/initial
 - 9/25/25: A metric meant for tracking purposes `external_i_pae` was erroneously set to be used as a filter ([commit 49be2e9](https://github.com/SantiagoMille/germinal/commit/49be2e9), [issue #7](https://github.com/SantiagoMille/germinal/issues/7))
 - 9/26/25: Resolved an error which caused passing runs to crash at the final stage due to a misnamed variable ([commit 9292e1e](https://github.com/SantiagoMille/germinal/commit/9292e1e), [issue #11](https://github.com/SantiagoMille/germinal/issues/11))
 - 9/28/25: Resolved an error in throwing exception for AF3 calls + added containerization support ([commit e4ca63a](https://github.com/SantiagoMille/germinal/commit/e4ca63a), [raised in pr #12](https://github.com/SantiagoMille/germinal/pull/12))
+- 10/1/25: Resolved a bug where trajectory sequence and structure path information was not updated after AbMPNN redesign. True sequence / structures can still be found in the pdb files in the `structures/` folders ([commit b45136c](https://github.com/SantiagoMille/germinal/commit/b45136c))
 
 <!-- TOC --><a name="citation"></a>
 ## Citation
