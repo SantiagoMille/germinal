@@ -1,5 +1,5 @@
 # @package filter.final
-# Default final filters for scFv
+# Final filters for scFv PDL1
 # These are more stringent filters applied at the end of the pipeline
 
 # Structure metrics

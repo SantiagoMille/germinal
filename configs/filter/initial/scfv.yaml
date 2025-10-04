@@ -1,0 +1,23 @@
+# @package filter.initial
+# Default initial (post-hallucination) filters for scFv
+# These are more lenient filters applied after the hallucination step
+
+clashes:
+  value: 1
+  operator: '<'
+
+binder_near_hotspot:
+  value: true
+  operator: '=='
+
+cdr3_hotspot_contacts:
+  value: 0
+  operator: '>'
+
+percent_interface_cdr:
+  value: 0.5
+  operator: '>'
+
+interface_shape_comp:
+  value: 0.5
+  operator: '>'

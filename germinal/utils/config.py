@@ -137,9 +137,8 @@ def initialize_germinal_run(
     )
     # Initialize directory structure and I/O handler
     design_paths = RunLayout.create(design_path)
-    # Persist configuration parameters to file system
+    # Init I/O handler
     io = IO(design_paths)
-    io.save_run_config(run_settings, target_settings)
 
     # Compute CDR residue positions from framework and CDR lengths
     cdr_str = "_".join(str(i) for i in run_settings.get("cdr_lengths"))

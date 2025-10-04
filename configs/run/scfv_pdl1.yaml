@@ -1,21 +1,21 @@
 # @package _global_
-# VHH (nanobody) run configuration
+# scFv run configuration for PDL1
 
 # General run settings
-type: "nb"
-cdr_lengths: [11, 8, 18]
-fw_lengths: [25,17,38,14]
+type: "scfv"
+cdr_lengths: [8, 8, 13, 6, 6, 9] # heavy, then light
+fw_lengths: [25,17,38,52,17,33,10]
 pregenerate_seeds: false
-vh_first: null # not needed for nanobodies
-vh_len: null # not needed for nanobodies  
-vl_len: null # not needed for nanobodies
+vh_first: true
+vh_len: 120
+vl_len: 108
 
 # Loss function parameters
-weights_plddt: 1.0
+weights_plddt: 0.5
 weights_i_plddt: 1.0
 weights_pae_intra: 0.1
 weights_pae_inter: 0.5
-weights_iptm: 0.7
+weights_iptm: 0.75
 weights_con_intra: 0.1
 weights_con_inter: 0.2
 weights_rg: 0.1
@@ -30,13 +30,13 @@ framework_contact_loss: true
 framework_contact_offset: 1
 
 # Hallucination settings
-logits_steps: 65
+logits_steps: 60
 softmax_steps: 35
 search_steps: 10
 search_mutation_rate: 0.05
-plddt_threshold: 0.80
-i_ptm_threshold: 0.65
-i_pae_threshold: 0.30
+plddt_threshold: 0.8
+i_ptm_threshold: 0.67
+i_pae_threshold: 0.28
 seq_entropy_threshold: 0.10
 
 # IgLM settings
@@ -91,6 +91,7 @@ sample_models: true
 num_models: 1
 num_recycles_design: 3
 recycle_mode: "last"
+soft_iterations: 60
 
 # Other loss settings
 use_helix_loss: true
@@ -105,7 +106,7 @@ save_design_animations: false
 save_design_trajectory_plots: false
 
 # Other settings
-omit_AAs: "C"
+omit_AAs: false
 force_reject_AA: false
 dgram_cce: 0.01
 show_config: true

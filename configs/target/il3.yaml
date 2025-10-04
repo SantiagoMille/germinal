@@ -1,0 +1,8 @@
+# @package target
+# IL3 target configuration
+
+target_name: "il3"
+target_pdb_path: "pdbs/il3.pdb"
+target_chain: "A"
+binder_chain: "B"
+target_hotspots: "A23,A25,A26,A31,A40,A104"

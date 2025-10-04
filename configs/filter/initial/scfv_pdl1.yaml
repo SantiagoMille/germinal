@@ -1,5 +1,5 @@
 # @package filter.initial
-# Default initial (post-hallucination) filters
+# Initial (post-hallucination) filters for scFv PDL1
 # These are more lenient filters applied after the hallucination step
 
 clashes:
@@ -19,5 +19,5 @@ percent_interface_cdr:
   operator: '>'
 
 interface_shape_comp:
-  value: 0.6
+  value: 0.5
   operator: '>'

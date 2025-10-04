@@ -64,12 +64,12 @@ def germinal_design(
     starting_pdb = run_settings["starting_pdb_complex"]
     chain = target_settings["target_chain"]
     target_hotspot_residues = target_settings.get("target_hotspots", "")
-    length = target_settings["length"]
     design_models = run_settings.get("design_models", [0,1,2,3,4])
     
     # Unpack individual parameters from run_settings
     pos = run_settings.get("cdr_positions")
     cdr_lengths = run_settings.get("cdr_lengths")
+    fw_lengths = run_settings.get("fw_lengths")
     clear_best = run_settings.get("clear_best", True)
     bias_redesign = run_settings.get("bias_redesign", 10)
     binder_chain = target_settings.get("binder_chain", "B")
@@ -81,14 +81,15 @@ def germinal_design(
     num_models = run_settings.get("num_models", 1)
     recycle_mode = run_settings.get("recycle_mode", "last")
 
+    length = sum(fw_lengths)+sum(cdr_lengths)
+
     use_pos_distance = run_settings.get("use_pos_distance", True)
-    sequence = run_settings.get("sequence", None)
     grad_merge_method = run_settings.get("grad_merge_method", "pcgrad")
-    iglm_scale = run_settings.get("iglm_schedule", [0.0, 0.2, 0.4, 1.0])
-    iglm_temp = run_settings.get("iglm_temp", 0.6)
-    vh_len= run_settings.get("vh_len", 0)
-    vh_first= run_settings.get("vh_first", True)
-    vl_len= run_settings.get("vl_len", 0)
+    iglm_scale = run_settings.get("iglm_scale", [0.0, 0.2, 0.4, 1.0])
+    iglm_temp = run_settings.get("iglm_temp", 0.6) 
+    vh_len = run_settings.get("vh_len", None)
+    vh_first = run_settings.get("vh_first", True)
+    vl_len = run_settings.get("vl_len", None)
     iglm_species = run_settings.get("iglm_species", "[HUMAN]")
     dimer = target_settings.get("dimer", False)
     save_filters = {
@@ -163,7 +164,6 @@ def germinal_design(
         vh_len=vh_len,
         use_pos_distance=use_pos_distance,
         rm_template_ic=True,
-        sequence=sequence,
         rm_aa=run_settings.get("omit_AAs", ""),
         starting_binder_seq=starting_binder_seq,
         mode=seq_init_mode,
