@@ -242,7 +242,6 @@ class _af_prep:
     if bias_redesign is True: bias_redesign = 1
     
     # get pdb info
-    target_chain = kwargs.pop("chain",target_chain) 
     chains = f"{target_chain},{binder_chain}" if redesign else target_chain
     im = [True] * len(target_chain.split(",")) 
     if redesign: im += [ignore_missing] * len(binder_chain.split(","))

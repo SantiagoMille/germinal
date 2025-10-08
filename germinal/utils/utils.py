@@ -236,21 +236,13 @@ def idx_from_ranges(ranges, chain="B", offset=0):
     ranges = ranges.replace(chain, "")
     for part in ranges.split(","):
         if part[0].isalpha():
-            part = part[1:]
-            if "-" in part:
-                start, end = map(int, part.split("-"))
-                start = start + offset
-                end = end + offset
-                rows.extend(range(start - 1, end))
-            else:
-                rows.append(int(part) + offset - 1)
+            continue
         else:
             if "-" in part:
                 start, end = map(int, part.split("-"))
-                rows.extend(range(start - 1, end))
+                rows.extend(range(start + offset - 1, end + offset))
             else:
-                rows.append(int(part) - 1)
-    # Return the selected rows
+                rows.append(int(part) + offset - 1)
     return rows
 
 
@@ -349,6 +341,11 @@ def create_starting_structure(
     # Add chain from second structure as chain B
     chainB = structure2[0][start_binder_chain]
     chainB.id = binder_chain  # Rename the chain to B
+
+    offset = np.array([30.0, 30.0, 0.0])  # move binder +30 Å along X
+    for atom in chainB.get_atoms():
+        atom.set_coord(atom.coord + offset)
+
     model.add(chainB)
     for chain_id in target_chain[1:]:
         chain = structure1[0][chain_id]
@@ -409,6 +406,12 @@ def hotspot_residues(
     # Parse the PDB file
     parser = PDBParser(QUIET=True)
     structure = parser.get_structure("complex", trajectory_pdb)
+
+    # AFM generates a single target chain even for multichain targets so need to rename binder as "B"
+    model = next(structure.get_models())
+    chains = list(model.get_chains())
+    if len(chains) == 2:
+        binder_chain = 'B'
 
     # Get the specified chain
     binder_atoms = Selection.unfold_entities(structure[0][binder_chain], "A")
@@ -928,7 +931,7 @@ def calculate_percentages(total, helix, sheet):
     return helix_percentage, sheet_percentage, loop_percentage
 
 
-def interface_cdrs(interface: str, cdrs: str, cdr3: str):
+def interface_cdrs(interface: str, cdrs: str, cdr3: str, binder_chain="B"):
     """Calculate CDR involvement in binding interface.
     
     Analyzes the overlap between interface residues and CDR regions to
@@ -944,7 +947,7 @@ def interface_cdrs(interface: str, cdrs: str, cdr3: str):
             - total_cdr_fraction: Fraction of interface residues that are CDRs
             - cdr3_fraction: Fraction of interface residues that are CDR3
     """
-    interface = idx_from_ranges(interface)
+    interface = idx_from_ranges(interface, chain=binder_chain)
     # cdrs = idx_from_ranges(cdrs)
     # cdr3 = idx_from_ranges(cdr3)
 

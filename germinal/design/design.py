@@ -142,7 +142,7 @@ def germinal_design(
 
     af_model.prep_inputs(
         pdb_filename=starting_pdb,
-        chain=chain,
+        target_chain=chain,
         binder_len=length,
         hotspot=target_hotspot_residues,
         seed=seed,

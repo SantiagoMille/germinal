@@ -144,8 +144,8 @@ def get_abmpnn_sequences(
     # Determine residues to fix (all non-CDR positions + interface residues)
     length = len(get_sequence_from_pdb(trajectory_pdb_af)[binder_chain])
     residues_to_fix = [
-        f"{binder_chain}{pos}"
-        for pos in range(1, length + 1)
+        f"{binder_chain}{pos+1}"
+        for pos in range(0, length)
         if pos not in run_settings["cdr_positions"]
     ]
     residues_to_fix = set(residues_to_fix + interface_residues_pdb_ids)

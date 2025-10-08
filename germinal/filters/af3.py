@@ -51,7 +51,8 @@ def create_input_dict(
         dict: AF3-compatible input JSON structure.
     """
     if isinstance(target_chains, str):
-        target_chains = [target_chains]
+        target_chains = target_chains.split(',')
+        
     if isinstance(seed, int):
         seed = [seed]
 
@@ -64,11 +65,13 @@ def create_input_dict(
 
     sequences = []
     for chain_id in [binder_chain] + target_chains:
+        if chain_id != binder_chain:
+            i = target_chains.index(chain_id)
         sequences.append(
             {
                 "protein": {
                     "id": [chain_id],
-                    "sequence": binder_seq if chain_id == binder_chain else target_seq,
+                    "sequence": binder_seq if chain_id == binder_chain else target_seq[i],
                     "unpairedMsa": "",
                     "pairedMsa": "",
                 }
@@ -327,7 +330,7 @@ def generate_msas(
         sequence = sequence_info["protein"]["sequence"]
         if chain != binder_chain:
             # Check if target MSA already exists to avoid regeneration
-            design_name = "target"
+            design_name = f"target_{chain}"
             relative_msa_path = os.path.join(f"msas/{design_name}.a3m")
             full_msa_path = os.path.join(output_dir, relative_msa_path)
 
@@ -508,7 +511,7 @@ def _run_af3(
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         universal_newlines=True,
-    )  # stderr=subprocess.DEVNULL
+    ) 
     for line in popen.stdout:
         continue
 
