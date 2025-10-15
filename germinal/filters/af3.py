@@ -375,7 +375,7 @@ def generate_msas(
     return input_json_data
 
 
-def extract_structure_and_scores(output_dir, design_name):
+def extract_structure_and_scores(output_dir, design_name, binder_chain):
     """
     Extract predicted structure and confidence scores from AF3 output.
 
@@ -414,12 +414,24 @@ def extract_structure_and_scores(output_dir, design_name):
         summary_metrics = json.load(f)
     with open(full_confidences, "r") as f:
         full_metrics = json.load(f)
+    #plddt
+    binder_plddt = [x for x, c in zip(full_metrics["atom_plddts"], full_metrics["atom_chain_ids"]) if c == binder_chain]
+    af3_scores["plddt_binder"] = np.mean(binder_plddt) / 100 if binder_plddt else 0
     af3_scores["plddt"] = np.mean(full_metrics["atom_plddts"]) / 100
+    #pae
     pae_matrix = np.array(full_metrics["pae"])
     af3_scores["pae_matrix"] = pae_matrix
     af3_scores["pae"] = np.mean(pae_matrix)
+    af3_scores["chain_pair_pae_min"] = np.array(summary_metrics['chain_pair_pae_min'])
+    binder_mask = np.array(full_metrics['token_chain_ids']) == binder_chain
+    pae_chain = pae_matrix[np.ix_(binder_mask, binder_mask)]  # double mask: rows AND columns
+    af3_scores["binder_pae"] = np.mean(pae_chain)
+    #ptm
     af3_scores["ptm"] = [summary_metrics["ptm"]]
     af3_scores["iptm"] = [summary_metrics["iptm"]]
+    af3_scores["chain_iptm"] = np.array(summary_metrics["chain_iptm"])
+    af3_scores['chain_ptm'] = np.array(summary_metrics["chain_ptm"])
+    #agg score
     af3_scores["aggregate_score"] = [summary_metrics["ranking_score"]]
     # Clean up temporary AF3 job folder to save disk space
     shutil.rmtree(af3_results_folder)
@@ -521,7 +533,7 @@ def _run_af3(
     if return_code:
         raise subprocess.CalledProcessError(return_code, run_cmds)
 
-    pdb_path, scores = extract_structure_and_scores(output_dir, input_json["name"])
+    pdb_path, scores = extract_structure_and_scores(output_dir, input_json["name"], binder_chain)
 
     return pdb_path, scores
 

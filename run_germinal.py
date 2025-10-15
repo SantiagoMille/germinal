@@ -139,6 +139,7 @@ def main(cfg: DictConfig):
                 io,
                 trajectory_sequence,
                 trajectory_pdb_af,
+                target_len
             )
         )
 
@@ -198,6 +199,7 @@ def main(cfg: DictConfig):
                         io,
                         abmpnn_sequence["seq"],
                         trajectory_pdb_af,
+                        target_len
                     )
                 )
                 # save trajectory

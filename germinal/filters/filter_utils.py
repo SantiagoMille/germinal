@@ -21,6 +21,7 @@ def run_filters(
     io: IO,
     trajectory_sequence: str,
     trajectory_pdb_af: str,
+    target_len: int,
 ) -> Tuple[dict, dict, bool, str]:
     """Run filters and compute metrics for a single design trajectory.
 
@@ -91,6 +92,7 @@ def run_filters(
         design_name=trajectory.design_name,
         run_settings=run_settings,
         hotspot_residue = target_settings.get("hotspot_residue", None),
+        target_len=target_len,
     )
 
     # ========================== FastRelax ==========================
@@ -168,12 +170,15 @@ def run_filters(
     # ========================== Aggregate Confidence Metrics ==========================
     confidence_metrics = {
         "plddt": external_metrics["plddt"].item(),
+        "plddt_binder": external_metrics["plddt_binder"].item(),
         "ptm": external_metrics["ptm"][0],
         "i_ptm": external_metrics["iptm"][0],
+        "chain_ptm": external_metrics["chain_ptm"][-1],
         "pae": external_metrics["pae"].item(),
         "aggregate_score": external_metrics["aggregate_score"][0],
         "i_pae": pDockQ2_out["ifpae_norm"].mean(),
         "i_plddt": (pDockQ2_out["ifplddt"].mean() / 100),
+        "binder_pae": external_metrics["binder_pae"].item()
     }
 
     # ========================== Calculate Hydrophobic Patch Filter ==========================
@@ -275,6 +280,9 @@ def build_filter_metrics(
         "external_aggregate_score": confidence_metrics["aggregate_score"],
         "external_i_pae": confidence_metrics["i_pae"],
         "external_i_plddt": confidence_metrics["i_plddt"],
+        "external_plddt_binder": confidence_metrics["plddt_binder"],
+        "external_chain_ptm": confidence_metrics["chain_ptm"],
+        "external_binder_pae": confidence_metrics["binder_pae"],
         # structure + interface
         "binder_near_hotspot": binder_near_hotspot,
         "clashes_unrelaxed": num_clashes_trajectory,
@@ -471,6 +479,7 @@ def run_structure_prediction(
     structures_directory,
     design_name: str,
     run_settings: dict,
+    target_len: int,
     hotspot_residue = None,
 ) -> Tuple[str, dict]:
     """
@@ -517,6 +526,7 @@ def run_structure_prediction(
             cdr3_idx = cdr3_idx,
             hotspot_residue = hotspot_residue,
             binder_chain=binder_chain,
+            target_len=target_len,
         )
     else:
         raise ValueError(

@@ -67,6 +67,7 @@ def run_chai(
     cdr3_idx = None,
     hotspot_residue = None,
     binder_chain = "B",
+    target_len: int = None,
 ):
     """
     Run Chai-1 structure prediction for antibody-target complex.
@@ -156,6 +157,14 @@ def run_chai(
     scores_dict["agg_score"] = np.mean(agg_scores)
     scores_dict["pae"] = torch.mean(pae)
     scores_dict["plddt"] = torch.mean(plddt)
+    scores_dict["plddt_binder"] = torch.mean(
+        plddt[target_len:]
+    )  # Average pLDDT for binder only
+    scores_dict["binder_pae"] = torch.mean(
+        torch.mean(pae[target_len:, target_len:])
+    )  # Average PAE for binder-target interface
+    scores_dict["chain_ptm"] = [1] #placeholder values for chai
+    scores_dict["chain_iptm"] = [1] #placeholder values for chai
 
     # Copy best structure to final save directory and clean up
     pdb_path = pdb_paths[best_sample]
