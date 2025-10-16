@@ -18,6 +18,8 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
 ```bash
 python run_germinal.py weights_beta=0.3 weights_plddt=1.0
 ```
+- Multi-chain target input has been added, yet it should be considered experimental. An example config file `configs/run/multichain_exmpl_insulin.yaml`, as well as an target file `configs/target/insulin.yaml`, have been added. Make sure that: 1) all chains in PDB have the right chain IDs (ideally A, B, C, etc.) and match the target YAML file used. 2) the binder chain is always the last chain (e.g. "B" for 1 chain target, "C" for 2 chain target, "D" for 3 chain target, etc.).
+- Now it is possible to add contact restraints for Chai. This could improve confidence. See `germinal/filters/chai.restraints`
 
 ## Contents
 
@@ -309,6 +311,15 @@ af3_model_dir: "/path/to/alphafold3/weights"
 af3_db_dir: "/path/to/alphafold3/databases"
 msa_db_dir: "/path/to/colabfold/databases"
 ```
+
+<!-- TOC --><a name="multichain"></a>
+### Multi-chain target input
+
+To design against multiple targets, it is necessary to create a `target` YAML with multiple chains. See `configs/target/insulin.yaml` for more details. Make that:
+- the binder chain should always be the last chain (i.e. `target_chain: "A,B"` and `binder_chain: "C"`)
+- the supplied PDBs have the correct chain naming (i.e. target PDB has chain A, B, ... & binder PDB has chain A)
+- if using chai's contact restraint option, use a `hotspot_residue` in chain A or modify `chai.restraints` accordingly
+- *NOTE: this feature should be considered experimental as is still under development.*
 
 <!-- TOC --><a name="output-format"></a>
 ## Output Format

@@ -80,8 +80,9 @@ def calculate_loop_sc(pose, binder_chain="B", target_chain="A"):
         sc_calc.AddResidue(1, residue)  # 1 = first molecule in comparison
 
     # Add all residues from chain B
+    target_chain = target_chain.split(",") if isinstance(target_chain, str) else target_chain
     for res_id in range(1, pose.total_residue() + 1):
-        if pose.chain(res_id) == target_chain:
+        if pose.chain(res_id) in target_chain:
             residue = pose.residue(res_id)
             tot_atoms += residue.natoms()
             sc_calc.AddResidue(2, residue)  # 2 = second molecule in comparison

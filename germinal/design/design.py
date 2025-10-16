@@ -382,7 +382,7 @@ def germinal_design(
         else:
             # does it have enough contacts to consider?
             binder_contacts = hotspot_residues(
-                model_pdb_path, binder_chain=binder_chain
+                model_pdb_path, binder_chain=binder_chain, target_chain=chain
             )
             binder_contacts_n = len(binder_contacts.items())
 

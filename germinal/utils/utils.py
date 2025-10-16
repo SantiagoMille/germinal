@@ -404,6 +404,7 @@ def hotspot_residues(
             for all residues with atoms within the distance cutoff of the target
     """
     # Parse the PDB file
+    target_chain = target_chain.split(",") if isinstance(target_chain, str) else target_chain
     parser = PDBParser(QUIET=True)
     structure = parser.get_structure("complex", trajectory_pdb)
 
@@ -418,7 +419,9 @@ def hotspot_residues(
     binder_coords = np.array([atom.coord for atom in binder_atoms])
 
     # Get atoms and coords for the target chain
-    target_atoms = Selection.unfold_entities(structure[0][target_chain], "A")
+    target_atoms = []
+    for chain_id in target_chain:
+        target_atoms.extend(Selection.unfold_entities(structure[0][chain_id], "A"))
     target_coords = np.array([atom.coord for atom in target_atoms])
 
     # Build KD trees for both chains

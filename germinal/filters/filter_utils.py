@@ -112,7 +112,7 @@ def run_filters(
 
     # ========================== Secondary structure content ==========================
     ss_content = utils.calc_ss_percentage(
-        external_pdb, run_settings, binder_chain, return_dict=True
+        external_pdb, run_settings, binder_chain, return_dict=True, target_chain=target_chain
     )
 
     # ========================== Calculate Interface Metrics ==========================
@@ -122,7 +122,7 @@ def run_filters(
         for k, v in zip(
             interface_metric_names,
             pyrosetta_utils.score_interface(
-                external_relaxed_pdb, target_settings["binder_chain"]
+                external_relaxed_pdb, binder_chain, target_chain=target_chain
             ),
         )
     }
