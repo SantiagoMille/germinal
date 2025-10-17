@@ -327,7 +327,6 @@ def build_filter_metrics(
         "cdr_hotspot_contacts": cdr_hotspot_contacts,
         "binder_near_hotspot": binder_near_hotspot,
         # derived confidence
-        "pdockq": pdockq_metrics["pDockQ"],
         "pdockq2": pdockq_metrics["pDockQ2"],
         "lis_lis": lis_metrics["lis"],
         "lis_lia": lis_metrics["lia"],
@@ -632,7 +631,6 @@ def compute_pdockq_and_lis(
             pDockQ2.append(chain_specific_pdockq2[i][-1])
 
     pdockq_metrics = {
-        "pDockQ": pDockQ.get_pdockq(external_pdb),
         "pDockQ2": np.mean(pDockQ2),
     }
 

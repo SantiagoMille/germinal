@@ -21,6 +21,7 @@ python run_germinal.py weights_beta=0.3 weights_plddt=1.0
 - Support for multi-chain target inputs has been added, yet it **should still be considered experimental**. An example config file `configs/run/multichain_exmpl_insulin.yaml`, as well as an target file `configs/target/insulin.yaml`, can be used as starting point. Make sure that: 1) all chains in PDB have the right chain IDs (ideally A, B, C, etc.) and match what the target YAML file used. 2) the binder chain should always be the last chain in the target config YAML file (e.g. "B" for 1 chain target, "C" for 2 chain target, "D" for 3 chain target, etc.).
 - Now it is possible to add contact restraints for Chai. This could help improve confidence. See `germinal/filters/chai.restraints`.
 - Binder-specific pLDDT score (`plddt_binder`) has been added and can now be used to filter designs.
+- pDockQ has been deprecated and no longer used. We still keep pDockQ2.
 
 ## Contents
 
