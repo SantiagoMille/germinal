@@ -562,7 +562,7 @@ def compute_hotspot_proximity(
         Tuple[bool, int, int]: (near_hotspot, cdr3_contacts, cdr_contacts)
     """
     # Default values when no hotspot specification is provided
-    binder_near_hotspot, cdr3_hotspot_contacts, cdr_hotspot_contacts = True, 1, 1
+    binder_near_hotspot, cdr3_hotspot_contacts, cdr_hotspot_contacts = True, 0, 0
     offset = 0
     binder_near_hotspot = []
     cdr3_hotspot_contacts_ch = 0

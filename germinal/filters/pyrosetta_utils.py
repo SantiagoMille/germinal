@@ -616,7 +616,7 @@ def get_residue_contacts(pdb_path, chain1="A", chain2="B", cutoff_distance=4.0):
     contacts = defaultdict(list)
 
     pose = pose_from_pdb(pdb_path)
-    target_len = get_chain_length(pose, chain1)
+    target_len = pose.total_residue() - get_chain_length(pose, chain2)
 
     # Get residues from each chain
     chain1_residues = []
@@ -634,6 +634,7 @@ def get_residue_contacts(pdb_path, chain1="A", chain2="B", cutoff_distance=4.0):
             chain2_residues.append(i)
             cb_coords[i] = get_cb_coordinates(pose.residue(i))
 
+    chain1_offset = min(chain1_residues) - 1
     # Create HBond set for hydrogen bond detection
     hbond_set = pose.get_hbonds()
 
@@ -725,7 +726,7 @@ def get_residue_contacts(pdb_path, chain1="A", chain2="B", cutoff_distance=4.0):
 
             # If any contacts were found, store the information
             if contact_types:
-                key = (res1, res2 - target_len)
+                key = (res1 - chain1_offset, res2 - target_len)
                 contacts[key] = {
                     "distance": min_distance,
                     "types": sorted(list(contact_types)),

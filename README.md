@@ -315,10 +315,10 @@ msa_db_dir: "/path/to/colabfold/databases"
 <!-- TOC --><a name="multichain"></a>
 ### Multi-chain target input
 
-To design against multiple targets, it is necessary to create a `target` YAML with multiple chains. See `configs/target/insulin.yaml` for more details. Make that:
-- the binder chain should always be the last chain (i.e. `target_chain: "A,B"` and `binder_chain: "C"`)
-- the supplied PDBs have the correct chain naming (i.e. target PDB has chain A, B, ... & binder PDB has chain A)
-- if using chai's contact restraint option, use a `hotspot_residue` in chain A or modify `chai.restraints` accordingly
+To design against multi-chain targets, it is necessary to create a `target` YAML with multiple chains. See `configs/target/insulin.yaml` for more details. Make that:
+- the binder chain should always be the last chain (i.e. `target_chain: "A,B"` and `binder_chain: "C"`) in the target YAML file.
+- the supplied target and binder PDBs have the correct chain naming (i.e. target PDB has chain A, B, ... & binder PDB has chain A). The pipeline generates a complex PDB using both target and binder PDBs. This process adds the binder as the last chain. 
+- if using Chai's contact restraint option, use a `hotspot_residue` in chain A in the target YAML or *modify `chai.restraints` accordingly* to ensure the residue corresponds to the correct chain.
 - *NOTE: this feature should be considered experimental as is still under development.*
 
 <!-- TOC --><a name="output-format"></a>
