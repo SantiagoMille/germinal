@@ -70,53 +70,63 @@ def pdb_2_coords(pdb):
     return chain_coords, plddt
 
 
-def calc_pdockq(chain_coords, plddt):
-    """Calculate the pDockQ scores
-    pdockQ = L / (1 + np.exp(-k*(x-x0)))+b
-    L= 0.724 x0= 152.611 k= 0.052 and b= 0.018
+def calc_pdockq(chain_coords, plddt, contact_cutoff=8.0):
     """
+    N-chain pDockQ:
+      - Builds a full distance matrix across all chains
+      - Uses only cross-chain contacts (< contact_cutoff Å)
+      - Averages plDDT over unique interface residues
+      - Counts unique contacts (upper-triangular, cross-chain)
+    Returns: (pdockq, avg_if_plddt, n_if_contacts)
+    """
+    # Concatenate coords in key order and track chain index per residue
 
-    # Get interface
-    ch1, ch2 = [*chain_coords.keys()]
-    coords1, coords2 = np.array(chain_coords[ch1]), np.array(chain_coords[ch2])
-    # Check total length
-    if coords1.shape[0] + coords2.shape[0] != plddt.shape[0]:
-        print(
-            "Length mismatch with plDDT:",
-            coords1.shape[0] + coords2.shape[0],
-            plddt.shape[0],
+    chains = list(chain_coords.keys())
+    coords_list = []
+    chain_idx = []
+    for ci, ch in enumerate(chains):
+        arr = np.asarray(chain_coords[ch], dtype=float)
+        coords_list.append(arr)
+        chain_idx.append(np.full(arr.shape[0], ci, dtype=int))
+    coords = np.vstack(coords_list)
+    chain_idx = np.concatenate(chain_idx)
+
+    # Sanity check on lengths
+    if coords.shape[0] != plddt.shape[0]:
+        raise ValueError(
+            f"Length mismatch: total residues from coords={coords.shape[0]} vs pLDDT={plddt.shape[0]}"
         )
 
-    # Calc 2-norm
-    mat = np.append(coords1, coords2, axis=0)
-    a_min_b = mat[:, np.newaxis, :] - mat[np.newaxis, :, :]
-    dists = np.sqrt(np.sum(a_min_b.T**2, axis=0)).T
-    l1 = len(coords1)
-    contact_dists = dists[:l1, l1:]
+    # Pairwise distances (N x N)
+    diff = coords[:, None, :] - coords[None, :, :]
+    dists = np.sqrt(np.sum(diff * diff, axis=-1))
 
-    # contact is defined as < 8A
-    contacts = np.argwhere(contact_dists <= 8)
+    # Cross-chain mask (exclude same-chain and diagonal)
+    same_chain = chain_idx[:, None] == chain_idx[None, :]
+    cross_chain = ~same_chain
+    np.fill_diagonal(cross_chain, False)
 
-    if contacts.shape[0] < 1:
-        pdockq = 0
-        avg_if_plddt = 0
-        n_if_contacts = 0
+    # Contact mask: cross-chain & within cutoff
+    contact_mask = (dists <= contact_cutoff) & cross_chain
 
-    else:
-        # Get the average interface plDDT
-        avg_if_plddt = np.average(
-            np.concatenate(
-                [plddt[np.unique(contacts[:, 0])], plddt[np.unique(contacts[:, 1])]]
-            )
-        )
+    # Count unique contacts (upper triangle to avoid double counting)
+    n_if_contacts = int(np.count_nonzero(np.triu(contact_mask, 1)))
 
-        # Get the number of interface contacts
-        n_if_contacts = contacts.shape[0]
+    if n_if_contacts == 0:
+        return 0.0, 0.0, 0
 
-        x = avg_if_plddt * np.log10(n_if_contacts + 1)  # Add 1 to avoid NaNs
-        pdockq = 0.724 / (1 + np.exp(-0.052 * (x - 152.611))) + 0.018
+    # Interface residues = unique residues participating in any cross-chain contact
+    sym_mask = contact_mask | contact_mask.T
+    interface_res = np.where(sym_mask.any(axis=1))[0]
 
-    return pdockq, avg_if_plddt, n_if_contacts
+    # Average interface pLDDT
+    avg_if_plddt = float(np.mean(plddt[interface_res]))
+
+    # pDockQ formula
+    x = avg_if_plddt * np.log10(n_if_contacts + 1)  # +1 to avoid log10(0)
+    pdockq = 0.724 / (1.0 + np.exp(-0.052 * (x - 152.611))) + 0.018
+
+    return float(pdockq), avg_if_plddt, n_if_contacts
 
 
 def compute_pdockq(pdb):
@@ -274,8 +284,10 @@ def pDockQ2(pdb_path, pae, distance=10.0):
     ## calculate pmiDockQ
 
     res = calc_pmidockq(avgif_pae, plddt_lst)
-
-    return res
+    pdock_scores = np.array(res.get("pmidockq"))
+    chains_result = {''.join(k): (v1, v2, v3) for k, v1, v2, v3 in zip(remain_contact_lst, plddt_lst, avgif_pae, pdock_scores)}
+    
+    return res, chains_result
 
 
 def calculate_lis(

@@ -80,8 +80,9 @@ def calculate_loop_sc(pose, binder_chain="B", target_chain="A"):
         sc_calc.AddResidue(1, residue)  # 1 = first molecule in comparison
 
     # Add all residues from chain B
+    target_chain = target_chain.split(",") if isinstance(target_chain, str) else target_chain
     for res_id in range(1, pose.total_residue() + 1):
-        if pose.chain(res_id) == target_chain:
+        if pose.chain(res_id) in target_chain:
             residue = pose.residue(res_id)
             tot_atoms += residue.natoms()
             sc_calc.AddResidue(2, residue)  # 2 = second molecule in comparison
@@ -261,26 +262,58 @@ def align_pdbs(reference_pdb, align_pdb, reference_chain_id, align_chain_id):
     reference_pose = pr.pose_from_pdb(reference_pdb)
     align_pose = pr.pose_from_pdb(align_pdb)
 
-    align = AlignChainMover()
-    align.pose(reference_pose)
-
-    # If the chain IDs contain commas, split them and only take the first value
+    # Take the first token if "A,B" is passed
     reference_chain_id = reference_chain_id.split(",")[0]
-    align_chain_id = align_chain_id.split(",")[0]
+    align_chain_id     = align_chain_id.split(",")[0]
 
-    # Get the chain number corresponding to the chain ID in the poses
-    reference_chain = pr.rosetta.core.pose.get_chain_id_from_chain(
-        reference_chain_id, reference_pose
+    # Chain numbers in these poses
+    reference_chain = pr.rosetta.core.pose.get_chain_id_from_chain(reference_chain_id, reference_pose)
+    align_chain     = pr.rosetta.core.pose.get_chain_id_from_chain(align_chain_id, align_pose)
+
+    # Chain ranges
+    ref_conf = reference_pose.conformation()
+    mob_conf = align_pose.conformation()
+    ref_begin = ref_conf.chain_begin(reference_chain)
+    ref_end   = ref_conf.chain_end(reference_chain)
+    mob_begin = mob_conf.chain_begin(align_chain)
+    mob_end   = mob_conf.chain_end(align_chain)
+
+    # Equal-length contiguous segment from starts of each chain
+    len_ref = ref_end - ref_begin + 1
+    len_mob = mob_end - mob_begin + 1
+    k = min(len_ref, len_mob)
+
+    # Build matching CA pairs (only add when both residues are protein and have CA)
+    mob_ids = pr.rosetta.utility.vector1_core_id_AtomID()
+    ref_ids = pr.rosetta.utility.vector1_core_id_AtomID()
+    for off in range(k):
+        r = ref_begin + off
+        m = mob_begin + off
+        rsd_r = reference_pose.residue(r)
+        rsd_m = align_pose.residue(m)
+        if rsd_r.is_protein() and rsd_r.has("CA") and rsd_m.is_protein() and rsd_m.has("CA"):
+            ref_ids.append(pr.rosetta.core.id.AtomID(rsd_r.atom_index("CA"), r))
+            mob_ids.append(pr.rosetta.core.id.AtomID(rsd_m.atom_index("CA"), m))
+
+    # Need at least 3 pairs; use len(...) for vector1_* containers
+    if len(mob_ids) < 3:
+        raise ValueError("Not enough matched CA pairs to superimpose (need ≥3).")
+    if len(mob_ids) != len(ref_ids):
+        raise ValueError("Internal error: mobile/ref CA pair counts differ.")
+
+    # ---- superimpose using the std::map overload (works on your build) ----
+    atom_map = pr.rosetta.std.map_core_id_AtomID_core_id_AtomID()
+    for a_m, a_r in zip(mob_ids, ref_ids):   # MOBILE -> REFERENCE
+        atom_map[a_m] = a_r
+
+    pr.rosetta.core.scoring.superimpose_pose(
+        align_pose,
+        reference_pose,
+        atom_map
     )
-    align_chain = pr.rosetta.core.pose.get_chain_id_from_chain(
-        align_chain_id, align_pose
-    )
+    # ----------------------------------------------------------------------
 
-    align.source_chain(align_chain)
-    align.target_chain(reference_chain)
-    align.apply(align_pose)
-
-    # Overwrite aligned pdb
+    # Save aligned PDB
     align_pose.dump_pdb(align_pdb)
     clean_pdb(align_pdb)
 
@@ -426,6 +459,13 @@ def unaligned_rmsd(reference_pdb, align_pdb, reference_chain_id, align_chain_id)
     # Apply selectors to get residue subsets
     reference_chain_subset = reference_chain_selector.apply(reference_pose)
     align_chain_subset = align_chain_selector.apply(align_pose)
+
+    if not any(align_chain_subset):
+        n_chains = align_pose.num_chains()
+        last_res = align_pose.conformation().chain_end(n_chains)
+        fallback_chain_id = align_pose.pdb_info().chain(last_res)
+        align_chain_selector = ChainSelector(fallback_chain_id)
+        align_chain_subset = align_chain_selector.apply(align_pose)
 
     # Convert subsets to residue index vectors
     reference_residue_indices = get_residues_from_subset(reference_chain_subset)
@@ -576,7 +616,7 @@ def get_residue_contacts(pdb_path, chain1="A", chain2="B", cutoff_distance=4.0):
     contacts = defaultdict(list)
 
     pose = pose_from_pdb(pdb_path)
-    target_len = get_chain_length(pose, chain1)
+    target_len = pose.total_residue() - get_chain_length(pose, chain2)
 
     # Get residues from each chain
     chain1_residues = []
@@ -594,6 +634,7 @@ def get_residue_contacts(pdb_path, chain1="A", chain2="B", cutoff_distance=4.0):
             chain2_residues.append(i)
             cb_coords[i] = get_cb_coordinates(pose.residue(i))
 
+    chain1_offset = min(chain1_residues) - 1
     # Create HBond set for hydrogen bond detection
     hbond_set = pose.get_hbonds()
 
@@ -685,7 +726,7 @@ def get_residue_contacts(pdb_path, chain1="A", chain2="B", cutoff_distance=4.0):
 
             # If any contacts were found, store the information
             if contact_types:
-                key = (res1, res2 - target_len)
+                key = (res1 - chain1_offset, res2 - target_len)
                 contacts[key] = {
                     "distance": min_distance,
                     "types": sorted(list(contact_types)),

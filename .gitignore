@@ -15,5 +15,7 @@ __pycache__/
 *.pt
 *.out
 params/*params_*
+pdbs/*_scfv.pdb
+pdbs/*_nb.pdb
 
 .cursorignore

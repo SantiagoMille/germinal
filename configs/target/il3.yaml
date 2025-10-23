@@ -3,6 +3,7 @@
 
 target_name: "il3"
 target_pdb_path: "pdbs/il3.pdb"
+# Ensure chains in PDB have the right chain IDs (ideally A, B, C, etc.)
 target_chain: "A"
 binder_chain: "B"
 target_hotspots: "A23,A25,A26,A31,A40,A104"

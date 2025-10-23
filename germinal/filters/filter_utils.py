@@ -21,6 +21,7 @@ def run_filters(
     io: IO,
     trajectory_sequence: str,
     trajectory_pdb_af: str,
+    target_len: int,
 ) -> Tuple[dict, dict, bool, str]:
     """Run filters and compute metrics for a single design trajectory.
 
@@ -52,9 +53,13 @@ def run_filters(
     structures_directory = io.layout.trajectories / "structures"
     target_chain = target_settings["target_chain"]
     binder_chain = target_settings["binder_chain"]
-    target_sequence = utils.get_sequence_from_pdb(run_settings["starting_pdb_complex"])[
-        target_chain
-    ]
+    target_sequence = []
+    sequences_from_pdb = utils.get_sequence_from_pdb(run_settings["starting_pdb_complex"])
+
+    for ch in target_chain.split(","):    
+        target_sequence.append(sequences_from_pdb[
+            ch
+        ])
     if run_settings["type"].lower() == "nb":
         cdr3 = (
             np.array(
@@ -86,6 +91,8 @@ def run_filters(
         structures_directory=structures_directory,
         design_name=trajectory.design_name,
         run_settings=run_settings,
+        hotspot_residue = target_settings.get("hotspot_residue", None),
+        target_len=target_len,
     )
 
     # ========================== FastRelax ==========================
@@ -105,7 +112,7 @@ def run_filters(
 
     # ========================== Secondary structure content ==========================
     ss_content = utils.calc_ss_percentage(
-        external_pdb, run_settings, binder_chain, return_dict=True
+        external_pdb, run_settings, binder_chain, return_dict=True, target_chain=target_chain
     )
 
     # ========================== Calculate Interface Metrics ==========================
@@ -115,7 +122,7 @@ def run_filters(
         for k, v in zip(
             interface_metric_names,
             pyrosetta_utils.score_interface(
-                external_relaxed_pdb, target_settings["binder_chain"]
+                external_relaxed_pdb, binder_chain, target_chain=target_chain
             ),
         )
     }
@@ -150,23 +157,28 @@ def run_filters(
         interface_metrics["interface_residues"],
         run_settings["cdr_positions"],
         run_settings["cdr_positions"][sum(run_settings["cdr_lengths"][:-1]) :],
+        binder_chain=binder_chain,
     )
 
     # ========================== Calculate pDockQ, pDockQ2, LIS/LIA ==========================
     pdockq_metrics, lis_metrics, pDockQ2_out = compute_pdockq_and_lis(
         external_pdb=external_pdb,
         external_metrics=external_metrics,
+        binder_chain=binder_chain,
     )
 
     # ========================== Aggregate Confidence Metrics ==========================
     confidence_metrics = {
         "plddt": external_metrics["plddt"].item(),
+        "plddt_binder": external_metrics["plddt_binder"].item(),
         "ptm": external_metrics["ptm"][0],
         "i_ptm": external_metrics["iptm"][0],
+        "chain_ptm": external_metrics["chain_ptm"][-1],
         "pae": external_metrics["pae"].item(),
         "aggregate_score": external_metrics["aggregate_score"][0],
         "i_pae": pDockQ2_out["ifpae_norm"].mean(),
         "i_plddt": (pDockQ2_out["ifplddt"].mean() / 100),
+        "binder_pae": external_metrics["binder_pae"].item()
     }
 
     # ========================== Calculate Hydrophobic Patch Filter ==========================
@@ -268,6 +280,9 @@ def build_filter_metrics(
         "external_aggregate_score": confidence_metrics["aggregate_score"],
         "external_i_pae": confidence_metrics["i_pae"],
         "external_i_plddt": confidence_metrics["i_plddt"],
+        "external_plddt_binder": confidence_metrics["plddt_binder"],
+        "external_chain_ptm": confidence_metrics["chain_ptm"],
+        "external_binder_pae": confidence_metrics["binder_pae"],
         # structure + interface
         "binder_near_hotspot": binder_near_hotspot,
         "clashes_unrelaxed": num_clashes_trajectory,
@@ -312,9 +327,7 @@ def build_filter_metrics(
         "cdr_hotspot_contacts": cdr_hotspot_contacts,
         "binder_near_hotspot": binder_near_hotspot,
         # derived confidence
-        "pdockq_pDockQ": pdockq_metrics["pDockQ"],
-        "pdockq_pDockQ2": pdockq_metrics["pDockQ2"][0],
-        "pdockq2": pdockq_metrics["pDockQ2"][1],  # pdockq2 of the binder
+        "pdockq2": pdockq_metrics["pDockQ2"],
         "lis_lis": lis_metrics["lis"],
         "lis_lia": lis_metrics["lia"],
         # secondary structure + framework metrics
@@ -465,6 +478,8 @@ def run_structure_prediction(
     structures_directory,
     design_name: str,
     run_settings: dict,
+    target_len: int,
+    hotspot_residue = None,
 ) -> Tuple[str, dict]:
     """
     Run AF3 or Chai structure prediction for antibody-target complex.
@@ -496,6 +511,10 @@ def run_structure_prediction(
             msa_mode=run_settings["msa_mode"],
         )
     elif run_settings["structure_model"] == "chai":
+
+        cdr3_idx = run_settings["cdr_positions"][run_settings["cdr_lengths"][0] + run_settings["cdr_lengths"][1]:]
+        cdr3_idx = cdr3_idx[len(cdr3_idx)//2]
+
         external_pdb, external_metrics = chai.run_chai(
             trajectory_sequence,
             gettempdir(),
@@ -503,6 +522,10 @@ def run_structure_prediction(
             run_settings["starting_pdb_complex"],
             target_chain,
             seed=af3_seed[0],
+            cdr3_idx = cdr3_idx,
+            hotspot_residue = hotspot_residue,
+            binder_chain=binder_chain,
+            target_len=target_len,
         )
     else:
         raise ValueError(
@@ -538,41 +561,48 @@ def compute_hotspot_proximity(
         Tuple[bool, int, int]: (near_hotspot, cdr3_contacts, cdr_contacts)
     """
     # Default values when no hotspot specification is provided
-    binder_near_hotspot, cdr3_hotspot_contacts, cdr_hotspot_contacts = True, 1, 1
+    binder_near_hotspot, cdr3_hotspot_contacts, cdr_hotspot_contacts = True, 0, 0
+    offset = 0
+    binder_near_hotspot = []
+    cdr3_hotspot_contacts_ch = 0
+    cdr_hotspot_contacts_ch = 0
 
     if len(target_settings["target_hotspots"]) > 0:
-        target_hotspots = (
-            np.array(
-                utils.idx_from_ranges(
-                    target_settings["target_hotspots"],
-                    target_chain,
+        target_chains = target_chain.split(",")
+        for ch in target_chains:
+
+            target_hotspots = np.array(utils.idx_from_ranges(target_settings["target_hotspots"],ch,offset=offset))+1
+
+            hotspot_region = pyrosetta_utils.find_nearby_residues_from_pdb(
+                external_relaxed_pdb,
+                target_hotspots,
+                distance_threshold=distance_threshold,
+                chain=ch,
+            )
+
+            contacts = pyrosetta_utils.get_residue_contacts(
+                external_relaxed_pdb, ch, binder_chain, contact_distance
+            )
+            contacts_per_chain = np.array(list(contacts.keys()))
+
+            try:
+                binder_near_chain_ht, cdr3_hotspot_contacts_ch, cdr_hotspot_contacts_ch = (
+                    is_binder_near_hotspot(
+                        contacts_per_chain[:, 0],
+                        hotspot_region,
+                        contacts_per_chain[:, 1],
+                        one_indexed_cdr_positions,
+                        cdr3,
+                        min_hotspot_contacts=min_hotspot_contacts,
+                    )
                 )
-            )
-            + 1
-        )
+            except Exception:
+                binder_near_chain_ht, cdr3_hotspot_contacts_ch, cdr_hotspot_contacts_ch = (False, 0, 0) 
 
-        hotspot_region = pyrosetta_utils.find_nearby_residues_from_pdb(
-            external_relaxed_pdb,
-            target_hotspots,
-            distance_threshold=distance_threshold,
-            chain=target_chain,
-        )
-
-        contacts = pyrosetta_utils.get_residue_contacts(
-            external_relaxed_pdb, target_chain, binder_chain, contact_distance
-        )
-        contacts_per_chain = np.array(list(contacts.keys()))
-
-        binder_near_hotspot, cdr3_hotspot_contacts, cdr_hotspot_contacts = (
-            is_binder_near_hotspot(
-                contacts_per_chain[:, 0],
-                hotspot_region,
-                contacts_per_chain[:, 1],
-                one_indexed_cdr_positions,
-                cdr3,
-                min_hotspot_contacts=min_hotspot_contacts,
-            )
-        )
+            binder_near_hotspot.append(binder_near_chain_ht)
+            cdr3_hotspot_contacts += cdr3_hotspot_contacts_ch
+            cdr_hotspot_contacts += cdr_hotspot_contacts_ch
+        binder_near_hotspot = all(binder_near_hotspot)
 
     return binder_near_hotspot, cdr3_hotspot_contacts, cdr_hotspot_contacts
 
@@ -580,6 +610,7 @@ def compute_hotspot_proximity(
 def compute_pdockq_and_lis(
     external_pdb: str,
     external_metrics: dict,
+    binder_chain: str,
 ) -> Tuple[dict, dict, dict]:
     """
     Compute docking quality metrics: pDockQ, pDockQ2, LIS, LIA (0-1 scale, higher=better).
@@ -592,14 +623,15 @@ def compute_pdockq_and_lis(
         Tuple[dict, dict, dict]: (pdockq_metrics, lis_metrics, pDockQ2_out)
     """
     external_pae = external_metrics["pae_matrix"]
-    pDockQ2_out = pDockQ.pDockQ2(external_pdb, external_pae)
+    pDockQ2_out, chain_specific_pdockq2 = pDockQ.pDockQ2(external_pdb, external_pae)
+    pDockQ2 = []
+
+    for i in chain_specific_pdockq2.keys():
+        if binder_chain in i:
+            pDockQ2.append(chain_specific_pdockq2[i][-1])
 
     pdockq_metrics = {
-        "pDockQ": pDockQ.get_pdockq(external_pdb),
-        "pDockQ2": (
-            pDockQ2_out.get("pmidockq", [0, 0])[0],
-            pDockQ2_out.get("pmidockq", [0, 0])[1],
-        ),
+        "pDockQ2": np.mean(pDockQ2),
     }
 
     raw_lis_metrics = pDockQ.calculate_lis(external_pdb, external_pae)

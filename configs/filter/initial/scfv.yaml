@@ -1,5 +1,5 @@
 # @package filter.initial
-# Default initial (post-hallucination) filters for scFv
+# Default (post-hallucination) filters for scFv
 # These are more lenient filters applied after the hallucination step
 
 clashes:

@@ -18,6 +18,10 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
 ```bash
 python run_germinal.py weights_beta=0.3 weights_plddt=1.0
 ```
+- Support for multi-chain target inputs has been added, yet it **should still be considered experimental**. An example config file `configs/run/multichain_exmpl_insulin.yaml`, as well as an target file `configs/target/insulin.yaml`, can be used as starting point. Make sure that: 1) all chains in PDB have the right chain IDs (ideally A, B, C, etc.) and match what the target YAML file used. 2) the binder chain should always be the last chain in the target config YAML file (e.g. "B" for 1 chain target, "C" for 2 chain target, "D" for 3 chain target, etc.).
+- Now it is possible to add contact restraints for Chai. This could help improve confidence. See `germinal/filters/chai.restraints`.
+- Binder-specific pLDDT score (`plddt_binder`) has been added and can now be used to filter designs.
+- pDockQ has been deprecated and no longer used. We still keep pDockQ2.
 
 ## Contents
 
@@ -309,6 +313,15 @@ af3_model_dir: "/path/to/alphafold3/weights"
 af3_db_dir: "/path/to/alphafold3/databases"
 msa_db_dir: "/path/to/colabfold/databases"
 ```
+
+<!-- TOC --><a name="multichain"></a>
+### Multi-chain target input
+
+To design against multi-chain targets, it is necessary to create a `target` YAML with multiple chains. See `configs/target/insulin.yaml` for more details. Make sure that:
+- the binder chain is always the last chain (i.e. `target_chain: "A,B"` and `binder_chain: "C"`) in the target YAML file.
+- the supplied target and binder PDBs have the correct chain naming (i.e. target PDB has chain A, B, ... & binder PDB has only one chain A). The pipeline generates a complex PDB that combined all chains in the right order using both target and binder PDBs. This process sets the binder as the last chain. 
+- if using Chai's contact restraint option, by default use a `hotspot_residue` in chain A in the target YAML or **modify `chai.restraints` accordingly** to ensure the residue corresponds to the correct chain.
+- *NOTE: this feature should be considered experimental as is still under development.*
 
 <!-- TOC --><a name="output-format"></a>
 ## Output Format

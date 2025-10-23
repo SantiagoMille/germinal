@@ -35,6 +35,7 @@ import os
 import hashlib
 import time
 import random
+import pandas as pd
 
 
 def generate_unique_hash():
@@ -63,6 +64,10 @@ def run_chai(
     pdb: str,
     target_chain: str = "A",
     seed: int = 0,
+    cdr3_idx = None,
+    hotspot_residue = None,
+    binder_chain = "B",
+    target_len: int = None,
 ):
     """
     Run Chai-1 structure prediction for antibody-target complex.
@@ -97,15 +102,27 @@ def run_chai(
     sequences = get_sequence_from_pdb(pdb)
 
     # Create FASTA input file with target and binder sequences
+    target_chains = target_chain.split(",")
     with open(fasta_path, "w") as fh:
-        fh.write(">protein|name=target_protein\n")
-        fh.write(sequences[target_chain] + "\n")
+        for i, ch in enumerate(target_chains):
+            fh.write(f">protein|name=target_protein_{i}\n")
+            fh.write(sequences[ch] + "\n")
         fh.write(">protein|name=binder_protein\n")
         fh.write(binder_sequence + "\n")
 
     # Create empty output directory (required by Chai-1 inference)
     output_dir = Path(os.path.join(output_dir, "tmp", hash_id, "outputs"))
     output_dir.mkdir(exist_ok=False)
+
+    if cdr3_idx is not None and hotspot_residue is not None:
+        constraint = True
+        constraint_path = Path(__file__).with_name("chai.restraints")
+        rests_df = pd.read_csv(constraint_path)
+        rest_residue = binder_sequence[cdr3_idx]
+        rests_df.loc[0, 'chainB'] = binder_chain
+        rests_df.loc[0, 'res_idxB'] = f'{rest_residue}{cdr3_idx}'
+        rests_df.loc[0, 'res_idxA'] = hotspot_residue
+        rests_df.to_csv(constraint_path, index=False)
 
     # Run Chai-1 structure prediction with optimized parameters
     candidates = run_inference(
@@ -116,6 +133,7 @@ def run_chai(
         device="cuda:0",  # GPU device for acceleration
         use_esm_embeddings=True,  # Use ESM language model embeddings
         seed=seed,  # Random seed for reproducibility
+        constraint_path = constraint_path if constraint else None,  # Path to restraints file
     )
 
     # Convert output CIF files to PDB format for compatibility
@@ -139,6 +157,14 @@ def run_chai(
     scores_dict["agg_score"] = np.mean(agg_scores)
     scores_dict["pae"] = torch.mean(pae)
     scores_dict["plddt"] = torch.mean(plddt)
+    scores_dict["plddt_binder"] = torch.mean(
+        plddt[target_len:]
+    )  # Average pLDDT for binder only
+    scores_dict["binder_pae"] = torch.mean(
+        torch.mean(pae[target_len:, target_len:])
+    )  # Average PAE for binder-target interface
+    scores_dict["chain_ptm"] = [1] #placeholder values for chai
+    scores_dict["chain_iptm"] = [1] #placeholder values for chai
 
     # Copy best structure to final save directory and clean up
     pdb_path = pdb_paths[best_sample]

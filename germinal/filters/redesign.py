@@ -20,10 +20,10 @@ mp.set_start_method("spawn", force=True)
 
 def abmpnn_design(
     trajectory_pdb: str,
-    target_chain: str,
-    binder_chain: str,
     trajectory_interface_residues: str,
     run_settings: Dict[str, Any],
+    target_chain: str = "A",
+    binder_chain: str = "B",
 ) -> Dict[str, Any]:
     """
     Generate redesigned sequences using AbMPNN for a given PDB structure.
@@ -47,8 +47,7 @@ def abmpnn_design(
     # Determine which residues to fix during redesign
     design_chains = f"{target_chain},{binder_chain}"
     if run_settings.get("mpnn_fix_interface", False):
-        fixed_positions = f"{target_chain},{trajectory_interface_residues}".rstrip(",")
-        print(f"Fixing residues: {trajectory_interface_residues}")
+        fixed_positions = ",".join(target_chain.split(",") + [str(trajectory_interface_residues)]).rstrip(",")
     else:
         fixed_positions = target_chain
 
@@ -93,10 +92,10 @@ def abmpnn_worker(
     """
     result = abmpnn_design(
         trajectory_pdb,
-        target_chain,
-        binder_chain,
         trajectory_interface_residues,
         run_settings,
+        target_chain = target_chain,
+        binder_chain = binder_chain,
     )
     with open(output_path, "wb") as f:
         pickle.dump(result, f)
@@ -104,11 +103,11 @@ def abmpnn_worker(
 
 def get_abmpnn_sequences(
     trajectory_pdb_af: str,
-    target_chain: str,
-    binder_chain: str,
     run_settings: Dict[str, Any],
     cdr_positions: List[int],
     atom_distance_cutoff: float = 3.0,
+    target_chain: str = "A",
+    binder_chain: str = "B",
 ) -> List[Dict[str, Any]]:
     """
     Generate AbMPNN redesigned sequences for a given trajectory.
@@ -142,10 +141,13 @@ def get_abmpnn_sequences(
         interface_residues_pdb_ids.append(f"{binder_chain}{pdb_res_num}")
 
     # Determine residues to fix (all non-CDR positions + interface residues)
-    length = len(get_sequence_from_pdb(trajectory_pdb_af)[binder_chain])
+    chains_pdb = get_sequence_from_pdb(trajectory_pdb_af)
+    if len(chains_pdb) < 3: # Using PDB from AFM which has only 2 chains
+        binder_chain = "B"
+    length = len(chains_pdb[binder_chain])
     residues_to_fix = [
-        f"{binder_chain}{pos}"
-        for pos in range(1, length + 1)
+        f"{binder_chain}{pos+1}"
+        for pos in range(0, length)
         if pos not in run_settings["cdr_positions"]
     ]
     residues_to_fix = set(residues_to_fix + interface_residues_pdb_ids)
@@ -235,8 +237,6 @@ def run_abmpnn_redesign_pipeline(
     try:
         abmpnn_sequences = get_abmpnn_sequences(
             trajectory_pdb_af=trajectory_pdb_af,
-            target_chain=target_chain,
-            binder_chain=binder_chain,
             run_settings=run_settings,
             cdr_positions=run_settings["cdr_positions"],
             atom_distance_cutoff=atom_distance_cutoff,

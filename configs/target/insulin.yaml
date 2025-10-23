@@ -1,0 +1,14 @@
+# @package target
+# IL3 target configuration
+
+target_name: "insulin"
+target_pdb_path: "pdbs/insulin.pdb"
+# Ensure chains in PDB have the right chain IDs (ideally A, B, C, etc.)
+target_chain: "A,B"
+# binder chain should always be the last chain (e.g. "B" for 1 chain target, "C" for 2 chain target, "D" for 3 chain target, etc.)
+binder_chain: "C"
+target_hotspots: "A2,A21,B12,B16"
+
+# Residue to be used for Chai-1 distance constraint ({residue 1-letter}{res. num.}). 
+# Can delete or set to None if no constraint. Residue should be in chain A
+hotspot_residue: "L13"
