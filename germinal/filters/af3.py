@@ -444,8 +444,8 @@ def extract_structure_and_scores(output_dir, design_name, binder_chain):
         df = pd.read_csv(ipsae_out_file, delim_whitespace=True)
         ipsae_score = df['ipSAE'][len(df['ipSAE'])-1]
         pdockq2_score = df['pDockQ2'][len(df['pDockQ2'])-1]
-        liss = df['LIS'][len(df['LIS'])-1]
-        ipsae = {'ipsae':ipsae_score, 'pdockq2':pdockq2_score, 'LIS':liss}
+        lis_score = df['LIS'][len(df['LIS'])-1]
+        ipsae = {'ipsae':ipsae_score, 'pdockq2':pdockq2_score, 'LIS':lis_score}
     except:
         print(f'ipSAE calculation failed!')
         ipsae = None
