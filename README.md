@@ -9,19 +9,7 @@ Germinal is a pipeline for designing de novo antibodies against specified epitop
 
 We describe Germinal in the preprint: ["Efficient generation of epitope-targeted de novo antibodies with Germinal"](https://www.biorxiv.org/content/10.1101/2025.09.19.677421v1)
 
-**⚠️ We are still actively working on code improvements.**
-
-- We strongly recommend use of [AF3](https://github.com/google-deepmind/alphafold3) for design filtering as done in the paper, as **filters are only calibrated for AF3 confidence metrics**. We are actively working to add Chai calibrated thresholds for commercial users. Until then, running Germinal with `structure_model: "chai"` and NOT `structure_model: "af3"` should be considered experimental and may have lower passing rates. Note that the current AF3 implementation assumes singularity for containerization. We are currently working on a Docker compatible wrapper, but if you need to run AF3 with Docker in the meantime, `_run_af3` in `germinal/filters/af3.py` holds the Singularity wrapper which should only need slight tweaks to run with Docker. More details on configuring AF3 are [here](#af3).
-- While nanobody design is fully functional and validated experimentally, the configs and filters for scFvs remain preliminary; this functionality should therefore still be regarded as experimental.
-- As recommended in the preprint, we suggest performing a small parameter sweep before launching full sampling runs. This is especially important when working with a new target or selecting a new epitope. In `configs/run/vhh_pdl1.yaml` and `configs/run/vhh_il3.yaml`, we provide the parameters that we used for PD-L1 and IL3 nanobody generations in the pre-print. We also include the filters used for these runs under `configs/filter/initial/` and `configs/filter/final/`. In `configs/run/vhh.yaml` and `configs/run/scfv.yaml` we provide a set of reasonable default parameters that we used as a starting point for parameter exploration and sweep experiments (see below **Important Notes and Tips for Design** for more details). One important distinction is that the structure model in the default nanobody configuration is `chai` instead of `af3` in order to allow users to run the pipeline with no additional setup. Note that final sampling runs in the preprint all used slightly modified parameters. Parameters can be configured from the command line. For example, you can set `weights_beta` and `weights_plddt` with the following command:
-
-```bash
-python run_germinal.py weights_beta=0.3 weights_plddt=1.0
-```
-- Support for multi-chain target inputs has been added, yet it **should still be considered experimental**. An example config file `configs/run/multichain_exmpl_insulin.yaml`, as well as an target file `configs/target/insulin.yaml`, can be used as starting point. Make sure that: 1) all chains in PDB have the right chain IDs (ideally A, B, C, etc.) and match what the target YAML file used. 2) the binder chain should always be the last chain in the target config YAML file (e.g. "B" for 1 chain target, "C" for 2 chain target, "D" for 3 chain target, etc.).
-- Now it is possible to add contact restraints for Chai. This could help improve confidence. See `germinal/filters/chai.restraints`.
-- Binder-specific pLDDT score (`plddt_binder`) has been added and can now be used to filter designs.
-- pDockQ has been deprecated and no longer used. We still keep pDockQ2.
+**⚠️ We are still actively working on code improvements [See our recommendations/tips](#tips-for-design)**. 
 
 ## Contents
 
@@ -355,6 +343,21 @@ runs/your_target_nb_20240101_120000/
 Hallucination is inherently expensive. Designing against a 130 residue target takes anywhere from 2-8 minutes for a nanobody design iteration on an H100 80GB GPU, depending on which stage the designed sequence reaches. For 40GB GPUs or scFvs, this number is around 50% larger.
 
 During sampling, we typically run antibody generation until there are around 1,000 passing designs against the specified target and observe a success rate of around ~1 per GPU hour. Of those, we typically select the top 40-50 sequences for experimental testing based on a combination of *in silico* metrics described in the preprint. While *in silico* success rates vary wildly across targets, we estimate that 200-400 H100 80GB GPU hours of sampling are typically enough to generate ~200 successful designs and some functional antibodies. 
+
+Please consider that:
+
+- We strongly recommend use of [AF3](https://github.com/google-deepmind/alphafold3) for design filtering as done in the paper, as **filters are only calibrated for AF3 confidence metrics**. We are actively working to add Chai calibrated thresholds for commercial users. Until then, running Germinal with `structure_model: "chai"` and NOT `structure_model: "af3"` should be considered experimental and may have lower passing rates. Note that the current AF3 implementation assumes singularity for containerization. We are currently working on a Docker compatible wrapper, but if you need to run AF3 with Docker in the meantime, `_run_af3` in `germinal/filters/af3.py` holds the Singularity wrapper which should only need slight tweaks to run with Docker. More details on configuring AF3 are [here](#af3).
+- While nanobody design is fully functional and validated experimentally, the configs and filters for scFvs remain preliminary; this functionality should therefore still be regarded as experimental.
+- As recommended in the preprint, we suggest performing a small parameter sweep before launching full sampling runs. This is especially important when working with a new target or selecting a new epitope. In `configs/run/vhh_pdl1.yaml` and `configs/run/vhh_il3.yaml`, we provide the parameters that we used for PD-L1 and IL3 nanobody generations in the pre-print. We also include the filters used for these runs under `configs/filter/initial/` and `configs/filter/final/`. In `configs/run/vhh.yaml` and `configs/run/scfv.yaml` we provide a set of reasonable default parameters that we used as a starting point for parameter exploration and sweep experiments (see below **Important Notes and Tips for Design** for more details). One important distinction is that the structure model in the default nanobody configuration is `chai` instead of `af3` in order to allow users to run the pipeline with no additional setup. Note that final sampling runs in the preprint all used slightly modified parameters. Parameters can be configured from the command line. For example, you can set `weights_beta` and `weights_plddt` with the following command:
+
+```bash
+python run_germinal.py weights_beta=0.3 weights_plddt=1.0
+```
+- Support for multi-chain target inputs has been added, yet it **should still be considered experimental**. An example config file `configs/run/multichain_exmpl_insulin.yaml`, as well as an target file `configs/target/insulin.yaml`, can be used as starting point. Make sure that: 1) all chains in PDB have the right chain IDs (ideally A, B, C, etc.) and match what the target YAML file used. 2) the binder chain should always be the last chain in the target config YAML file (e.g. "B" for 1 chain target, "C" for 2 chain target, "D" for 3 chain target, etc.).
+- Now it is possible to add contact restraints for Chai. This could help improve confidence. See `germinal/filters/chai.restraints`.
+- Binder-specific pLDDT score (`plddt_binder`) has been added and can now be used to filter designs.
+- pDockQ has been deprecated and no longer used. We still keep pDockQ2.
+
 
 **Tweaking Parameters:**
 

@@ -433,10 +433,27 @@ def extract_structure_and_scores(output_dir, design_name, binder_chain):
     af3_scores['chain_ptm'] = np.array(summary_metrics["chain_ptm"])
     #agg score
     af3_scores["aggregate_score"] = [summary_metrics["ranking_score"]]
+    
+    try:
+        ipsae_result = subprocess.run(
+            ["ipsae", full_confidences, af3_structure, "10", "10"],
+            capture_output=True,
+            text=True
+        )
+        ipsae_out_file = f"{os.path.dirname(os.path.abspath(af3_structure))}/{os.path.basename(af3_structure).replace('.cif','_10_10.txt')}"
+        df = pd.read_csv(ipsae_out_file, delim_whitespace=True)
+        ipsae_score = df['ipSAE'][len(df['ipSAE'])-1]
+        pdockq2_score = df['pDockQ2'][len(df['pDockQ2'])-1]
+        liss = df['LIS'][len(df['LIS'])-1]
+        ipsae = {'ipsae':ipsae_score, 'pdockq2_score':pdockq2_score, 'LIS':liss}
+    except:
+        print(f'ipSAE calculation failed!')
+        ipsae = None
+
     # Clean up temporary AF3 job folder to save disk space
     shutil.rmtree(af3_results_folder)
 
-    return pdb_path, af3_scores
+    return pdb_path, af3_scores, ipsae
 
 
 def _run_af3(
@@ -533,9 +550,9 @@ def _run_af3(
     if return_code:
         raise subprocess.CalledProcessError(return_code, run_cmds)
 
-    pdb_path, scores = extract_structure_and_scores(output_dir, input_json["name"], binder_chain)
+    pdb_path, scores, ipsae = extract_structure_and_scores(output_dir, input_json["name"], binder_chain)
 
-    return pdb_path, scores
+    return pdb_path, scores, ipsae
 
 
 def run_af3(

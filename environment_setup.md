@@ -24,7 +24,7 @@ pip install uv
 
 ```bash
 uv pip install pandas matplotlib numpy biopython scipy seaborn tqdm ffmpeg py3dmol \
-  chex dm-haiku dm-tree joblib ml-collections immutabledict optax cvxopt mdtraj colabfold
+  chex dm-haiku dm-tree joblib ml-collections immutabledict optax cvxopt mdtraj colabfold ipsae
 ```
 
 ---

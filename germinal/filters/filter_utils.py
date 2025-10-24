@@ -83,7 +83,7 @@ def run_filters(
             f"Type {run_settings['type']} not supported, select either nb or scfv"
         )
 
-    external_pdb, external_metrics = run_structure_prediction(
+    external_pdb, external_metrics, ipsae = run_structure_prediction(
         trajectory_sequence=trajectory_sequence,
         target_sequence=target_sequence,
         target_chain=target_chain,
@@ -178,7 +178,8 @@ def run_filters(
         "aggregate_score": external_metrics["aggregate_score"][0],
         "i_pae": pDockQ2_out["ifpae_norm"].mean(),
         "i_plddt": (pDockQ2_out["ifplddt"].mean() / 100),
-        "binder_pae": external_metrics["binder_pae"].item()
+        "binder_pae": external_metrics["binder_pae"].item(),
+        "ipsae":ipsae
     }
 
     # ========================== Calculate Hydrophobic Patch Filter ==========================
@@ -283,6 +284,7 @@ def build_filter_metrics(
         "external_plddt_binder": confidence_metrics["plddt_binder"],
         "external_chain_ptm": confidence_metrics["chain_ptm"],
         "external_binder_pae": confidence_metrics["binder_pae"],
+        "ipsae": confidence_metrics["ipsae"]["ipsae"],
         # structure + interface
         "binder_near_hotspot": binder_near_hotspot,
         "clashes_unrelaxed": num_clashes_trajectory,
@@ -328,6 +330,7 @@ def build_filter_metrics(
         "binder_near_hotspot": binder_near_hotspot,
         # derived confidence
         "pdockq2": pdockq_metrics["pDockQ2"],
+        "ipsae_pdockq2": confidence_metrics["ipsae"]["pdockq2"],
         "lis_lis": lis_metrics["lis"],
         "lis_lia": lis_metrics["lia"],
         # secondary structure + framework metrics
@@ -497,9 +500,9 @@ def run_structure_prediction(
         Tuple[str, dict]: (pdb_path, confidence_metrics)
     """
     af3_seed = [int(x) for x in np.random.randint(0, 999999, size=3)]
-
+    ipsae = None
     if run_settings["structure_model"] == "af3":
-        external_pdb, external_metrics = af3.run_af3(
+        external_pdb, external_metrics, ipsae = af3.run_af3(
             trajectory_sequence,
             target_sequence,
             target_chain,
@@ -532,7 +535,7 @@ def run_structure_prediction(
             f"Structure model {run_settings['structure_model']} not supported, select either af3 or chai"
         )
 
-    return external_pdb, external_metrics
+    return external_pdb, external_metrics, ipsae
 
 
 def compute_hotspot_proximity(
