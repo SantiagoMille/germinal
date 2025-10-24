@@ -445,7 +445,7 @@ def extract_structure_and_scores(output_dir, design_name, binder_chain):
         ipsae_score = df['ipSAE'][len(df['ipSAE'])-1]
         pdockq2_score = df['pDockQ2'][len(df['pDockQ2'])-1]
         liss = df['LIS'][len(df['LIS'])-1]
-        ipsae = {'ipsae':ipsae_score, 'pdockq2_score':pdockq2_score, 'LIS':liss}
+        ipsae = {'ipsae':ipsae_score, 'pdockq2':pdockq2_score, 'LIS':liss}
     except:
         print(f'ipSAE calculation failed!')
         ipsae = None
