@@ -41,8 +41,8 @@ seq_entropy_threshold: 0.10
 
 # IgLM settings
 grad_merge_method: "pcgrad"
-iglm_scale: [0.0, 0.2, 0.2, 1.0]
-iglm_temp: 0.6
+ablm_scale: [0.0, 0.2, 0.2, 1.0]
+ablm_temp: 0.6
 iglm_species: "[CAMEL]"
 seq_init_mode: ["gumbel", "soft"]  # STATIC: Fixed list, no argparse option
 bias_redesign: 10

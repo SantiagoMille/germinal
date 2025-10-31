@@ -53,7 +53,7 @@ class mk_af_model(design_model, _af_inputs, _af_loss, _af_prep, _af_design, _af_
                 "weights":  {"seq_ent":0.0, "plddt":0.0, "pae":0.0, "exp_res":0.0, "helix":0.0, "i_plddt":0.0},
                 "fape_cutoff":10.0, 
                 "grad_merge_method": 'pcgrad', 
-                "iglm_scale": 0.1,
+                "ablm_scale": 0.1,
                 "clip_value": 2.0, 
                 "min_lr_scale": 0.01}
 

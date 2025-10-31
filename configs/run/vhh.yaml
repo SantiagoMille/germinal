@@ -40,9 +40,10 @@ i_pae_threshold: 0.27
 seq_entropy_threshold: 0.10
 
 # IgLM settings
+ablm_model: "iglm"
 grad_merge_method: "pcgrad"
-iglm_scale: [0.2, 0.4, 0.4, 1.0]
-iglm_temp: 0.6
+ablm_scale: [0.2, 0.4, 0.4, 1.0]
+ablm_temp: 0.6
 iglm_species: "[HUMAN]"
 seq_init_mode: ["gumbel", "soft"]  # STATIC: Fixed list, no argparse option
 bias_redesign: 10

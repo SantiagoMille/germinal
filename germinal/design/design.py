@@ -85,12 +85,13 @@ def germinal_design(
 
     use_pos_distance = run_settings.get("use_pos_distance", True)
     grad_merge_method = run_settings.get("grad_merge_method", "pcgrad")
-    iglm_scale = run_settings.get("iglm_scale", [0.0, 0.2, 0.4, 1.0])
-    iglm_temp = run_settings.get("iglm_temp", 0.6) 
+    ablm_scale = run_settings.get("ablm_scale", [0.0, 0.2, 0.4, 1.0])
+    ablm_temp = run_settings.get("ablm_temp", 0.6) 
     vh_len = run_settings.get("vh_len", None)
     vh_first = run_settings.get("vh_first", True)
     vl_len = run_settings.get("vl_len", None)
     iglm_species = run_settings.get("iglm_species", "[HUMAN]")
+    ablm_model = run_settings.get("ablm_model", "iglm")
     dimer = target_settings.get("dimer", False)
     save_filters = {
         "plddt": run_settings.get("plddt_threshold", 0.84),
@@ -124,7 +125,7 @@ def germinal_design(
                 "pcgrad": grad_merge_method == "pcgrad",
                 "mgda": grad_merge_method == "mgda",
             },
-            iglm_scale=iglm_scale,
+            ablm_scale=ablm_scale,
             norm_seq_grad=normalize_gradient,
             linear_lr_annealing=linear_lr_annealing,
             min_lr_scale=min_lr_scale,
@@ -157,7 +158,8 @@ def germinal_design(
         bias_redesign=bias_redesign,
         learning_rate=learning_rate,
         optimizer=optimizer,
-        iglm_temp=iglm_temp,
+        ablm_temp=ablm_temp,
+        ablm_model=ablm_model,
         iglm_species=iglm_species,
         vl_len=vl_len,
         vh_first=vh_first,
@@ -844,7 +846,7 @@ def log_trajectory(af_model, design_name, io):
         "i_pae",
         "helix",
         "beta_strand",
-        "iglm_ll",
+        "ablm_ll",
         "i_plddt",
     ]
 
@@ -888,11 +890,11 @@ def plot_trajectory(af_model, design_name, io):
         io (IO): IO handler instance for file path management
         
     Note:
-        Currently focuses on overall loss and IgLM likelihood metrics. Additional
+        Currently focuses on overall loss and AbLM likelihood metrics. Additional
         metrics can be enabled by modifying the metrics_to_plot list.
     """
-    # metrics_to_plot = ['loss', 'plddt', 'ptm', 'i_ptm', 'con', 'i_con', 'pae', 'i_pae', 'helix', 'beta_strand3', 'iglm_ll']
-    metrics_to_plot = ["loss", "iglm_ll"]
+    # metrics_to_plot = ['loss', 'plddt', 'ptm', 'i_ptm', 'con', 'i_con', 'pae', 'i_pae', 'helix', 'beta_strand3', 'ablm_ll']
+    metrics_to_plot = ["loss", "ablm_ll"]
     colors = ["b", "g", "r", "c", "m", "y", "k"]
 
     for index, metric in enumerate(metrics_to_plot):
@@ -922,11 +924,11 @@ def plot_trajectory(af_model, design_name, io):
                 ),
                 dpi=150,
             )
-            # save loss values if iglm ll
-            if metric == "iglm_ll":
+            # save loss values if ablm ll
+            if metric == "ablm_ll":
                 with open(
                     os.path.join(
-                        io.layout.trajectories, "plots", design_name + "_iglm_ll.txt"
+                        io.layout.trajectories, "plots", design_name + "_ablm_ll.txt"
                     ),
                     "w",
                 ) as f:
@@ -941,7 +943,7 @@ def save_pssm_gradient_grid_animation(
     af_model,
     design_name: str,
     io: IO,
-    metrics: tuple = ("seq", "af_grad", "iglm_grad", "total_grad"),
+    metrics: tuple = ("seq", "af_grad", "ablm_grad", "total_grad"),
     fps: int = 5,
     ncols: int = 1,
 ) -> None:
@@ -957,7 +959,7 @@ def save_pssm_gradient_grid_animation(
         design_name (str): Unique identifier for this design trajectory
         io (IO): IO handler instance for file path management
         metrics (tuple, optional): Metrics to visualize. Defaults to
-            ("seq", "af_grad", "iglm_grad", "total_grad").
+            ("seq", "af_grad", "ablm_grad", "total_grad").
         fps (int, optional): Frames per second for animation. Defaults to 5.
         ncols (int, optional): Number of columns in subplot grid. Defaults to 1.
         

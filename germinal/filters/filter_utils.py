@@ -207,13 +207,17 @@ def run_filters(
         binder_rmsd = 100
 
     # ========================== Get Log-likelihood from IgLM ==========================
-    iglm_ll = get_iglm_ll(
-        sequence=trajectory_sequence,
-        species_token=run_settings["iglm_species"],
-        vh_first=run_settings["vh_first"],
-        vh_len=run_settings["vh_len"],
-        vl_len=run_settings["vl_len"],
-    )
+    if run_settings["ablm_model"] == "iglm":
+        iglm_ll = get_iglm_ll(
+            sequence=trajectory_sequence,
+            species_token=run_settings["iglm_species"],
+            vh_first=run_settings["vh_first"],
+            vh_len=run_settings["vh_len"],
+            vl_len=run_settings["vl_len"],
+        )
+    else:
+        iglm_ll = -1
+        print(f"Warning: {run_settings['ablm_model']} is not IgLM, skipping log-likelihood calculation")
 
     # ========================== Aggregate Filter Metrics ==========================
     filter_metrics = build_filter_metrics(

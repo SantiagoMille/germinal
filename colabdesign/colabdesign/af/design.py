@@ -32,12 +32,12 @@ def _ensure_2d(x):
     else:
         raise ValueError(f"Expected (L,K) or (1,L,K), got {x.shape}")
 
-def normalize_iglm_grad(iglm_grad, af2_grad):
+def normalize_ablm_grad(ablm_grad, af2_grad):
     total_bind_norm = np.linalg.norm(af2_grad[0])
-    total_iglm_norm = np.linalg.norm(iglm_grad)
-    scale_factor = total_bind_norm / (total_iglm_norm + 1e-7)
-    normalized_iglm_grad = iglm_grad * scale_factor
-    return normalized_iglm_grad
+    total_ablm_norm = np.linalg.norm(ablm_grad)
+    scale_factor = total_bind_norm / (total_ablm_norm + 1e-7)
+    normalized_ablm_grad = ablm_grad * scale_factor
+    return normalized_ablm_grad
 
 def mgda(grad_list, epsilon=1e-8):
     """
@@ -157,7 +157,7 @@ class _af_design:
     
     if not keep_history:
       # initialize trajectory
-      self._tmp = {"traj":{"seq":[],"xyz":[],"plddt":[],"pae":[],"af_grad":[],"iglm_grad":[],"total_grad":[]},
+      self._tmp = {"traj":{"seq":[],"xyz":[],"plddt":[],"pae":[],"af_grad":[],"ablm_grad":[],"total_grad":[]},
                    "log":[],
                    "best":{}}
 
@@ -331,30 +331,30 @@ class _af_design:
              models=models, backprop=backprop, callback=callback)
     
     effective_length = None
-    iglm_grad, ll = self.iglm_model.get_iglm_grad(self.aux["seq"])
+    ablm_grad, ll = self.ablm_model.get_ablm_grad(self.aux["seq"])
 
     self.aux["log"]["af_grad"] = np.array(self.aux["grad"]["seq"])
-    self.aux["log"]["iglm_grad"] = np.zeros(self.aux["grad"]["seq"].shape)
-    self.aux["log"]["iglm_ll"] = ll
+    self.aux["log"]["ablm_grad"] = np.zeros(self.aux["grad"]["seq"].shape)
+    self.aux["log"]["ablm_ll"] = ll
 
-    normalized_iglm_grad = normalize_iglm_grad(iglm_grad, self.aux["grad"]["seq"])
-    scaled_iglm_grad = self.opt['_iglm_scale'] * normalized_iglm_grad
+    normalized_ablm_grad = normalize_ablm_grad(ablm_grad, self.aux["grad"]["seq"])
+    scaled_ablm_grad = self.opt['_ablm_scale'] * normalized_ablm_grad
 
     if self.opt["grad_merge_method"]['scale']:
-      # simple scaling of iglm gradient
-      self.aux["grad"]["seq"] += scaled_iglm_grad
-      self.aux["log"]["iglm_grad"] = np.array(scaled_iglm_grad)
+      # simple scaling of ablm gradient
+      self.aux["grad"]["seq"] += scaled_ablm_grad
+      self.aux["log"]["ablm_grad"] = np.array(scaled_ablm_grad)
     elif self.opt["grad_merge_method"]['mgda']:
       #MGDA to combine two, diff objective gradients
-      w_opt, g_combined = mgda([self.aux["grad"]["seq"], scaled_iglm_grad])
+      w_opt, g_combined = mgda([self.aux["grad"]["seq"], scaled_ablm_grad])
       self.aux["log"]["af_grad"] = np.array(self.aux["grad"]["seq"] * w_opt[0])
-      self.aux["log"]["iglm_grad"] = np.array([scaled_iglm_grad * w_opt[1]])
+      self.aux["log"]["ablm_grad"] = np.array([scaled_ablm_grad * w_opt[1]])
       self.aux["grad"]["seq"] = g_combined
     elif self.opt["grad_merge_method"]['pcgrad']:
       #PCGrad to combine two, diff objective gradients
-      g_combined, bcg, igg = pcgrad(self.aux["grad"]["seq"][0], scaled_iglm_grad)
+      g_combined, bcg, igg = pcgrad(self.aux["grad"]["seq"][0], scaled_ablm_grad)
       self.aux["log"]["af_grad"] = np.array([bcg])
-      self.aux["log"]["iglm_grad"] = np.array([igg])
+      self.aux["log"]["ablm_grad"] = np.array([igg])
       self.aux["grad"]["seq"] = g_combined
 
     self.aux["log"]["total_grad"] = np.array(self.aux["grad"]["seq"])
@@ -418,7 +418,7 @@ class _af_design:
         "plddt": aux["plddt"],
         "pae":   aux["pae"],
         "af_grad":   aux["log"].get("af_grad"),
-        "iglm_grad": aux["log"].get("iglm_grad"),
+        "ablm_grad": aux["log"].get("ablm_grad"),
         "total_grad": aux["log"].get("total_grad")
       } 
       for k,v in traj.items():
@@ -549,16 +549,16 @@ class _af_design:
       
       lr_scale = step * ((1 - self.opt["soft"]) + (self.opt["soft"] * lr_scale_temp))
       lr_scale = max(lr_scale, self.opt["min_lr_scale"])
-      # iglm_scale value gets calculated here based on the values set in config.yaml
-      if sum(self.opt["iglm_scale"]) >=0: 
+      # ablm_scale value gets calculated here based on the values set in config.yaml
+      if sum(self.opt["ablm_scale"]) >=0: 
         if soft>=1: 
-          self.opt["_iglm_scale"] = self.opt["iglm_scale"][-2]
-          min_iglm_scale = self.opt["_iglm_scale"]
+          self.opt["_ablm_scale"] = self.opt["ablm_scale"][-2]
+          min_ablm_scale = self.opt["_ablm_scale"]
         else:
-          self.opt["_iglm_scale"] = self.opt["iglm_scale"][1]
-          min_iglm_scale = self.opt["iglm_scale"][0]
+          self.opt["_ablm_scale"] = self.opt["ablm_scale"][1]
+          min_ablm_scale = self.opt["ablm_scale"][0]
         
-        self.opt["_iglm_scale"] = max(self.opt["_iglm_scale"] * max(((i+1)/iters), soft), min_iglm_scale)
+        self.opt["_ablm_scale"] = max(self.opt["_ablm_scale"] * max(((i+1)/iters), soft), min_ablm_scale)
       
       self.step(lr_scale=lr_scale, num_recycles=num_recycles,
                 num_models=num_models, sample_models=sample_models, models=models,
@@ -681,16 +681,16 @@ class _af_design:
                                logits=seq_logits + bias)
         aux = self.predict(seq=mut_seq, return_aux=True, model_nums=model_nums, verbose=False, **kwargs)
         np_seq_repr = np.eye(20)[mut_seq[0]].astype(np.float32)
-        _, aux["iglm_ll"] = self.iglm_model.get_iglm_grad(np_seq_repr)
+        _, aux["ablm_ll"] = self.ablm_model.get_ablm_grad(np_seq_repr)
         buff.append({"aux":aux, "seq":np.array(mut_seq)})
       
       # accept best
-      losses = [x["aux"]["loss"] - self.opt["iglm_scale"][-1] * x["aux"]["iglm_ll"] for x in buff]
+      losses = [x["aux"]["loss"] - self.opt["ablm_scale"][-1] * x["aux"]["ablm_ll"] for x in buff]
 
       best = buff[np.argmin(losses)]
       self.aux, seq = best["aux"], jnp.array(best["seq"])
-      iglm_grad, ll = self.iglm_model.get_iglm_grad(np.eye(20)[best["seq"][0]].astype(np.float32))
-      self.aux["log"]["iglm_ll"] = ll
+      ablm_grad, ll = self.ablm_model.get_ablm_grad(np.eye(20)[best["seq"][0]].astype(np.float32))
+      self.aux["log"]["ablm_ll"] = ll
 
       self.set_seq(seq=seq, bias=bias)
       self._save_results(save_best=save_best, verbose=verbose, design_mode='hard', save_filters=save_filters)

@@ -14,6 +14,7 @@ from colabdesign.shared.utils import copy_dict
 from colabdesign.shared.model import order_aa
 
 from colabdesign.iglm.model import CustomIgLM
+from colabdesign.ablang.model import CustomAbLang
 
 resname_to_idx = residue_constants.resname_to_idx
 idx_to_resname = dict((v,k) for k,v in resname_to_idx.items())
@@ -37,22 +38,27 @@ class _af_prep:
     if num_seq is None: num_seq = self._num
     return prep_input_features(L=num_res, N=num_seq, T=num_templates)
   
-  def prep_iglm(self, cdr_positions, lens, **kwargs):
+  def prep_iglm(self, lens, **kwargs):
     # set temp if temp is in kwargs
-    iglm_specific_kwargs = ["iglm_temp", "iglm_species", "cdr_lengths", "starting_binder_seq", "seed"]
-    binder_specific_kwargs = ["vh_first", "vh_len", "vl_len"]
+    iglm_specific_kwargs = ["ablm_temp", "vh_first", "vh_len", "vl_len", "seed"]
     iglm_kwargs = {k:kwargs.pop(k) for k in iglm_specific_kwargs if k in kwargs}
-    binder_kwargs = {k:kwargs.pop(k) for k in binder_specific_kwargs if k in kwargs}
 
-    self.iglm_model = CustomIgLM(cdr_positions=cdr_positions, **iglm_kwargs)
-    self.iglm_model.fw_lens = lens['fw'] 
-    self.iglm_model.cdr_lens = lens['cdrs']
-    self.iglm_model.is_scfv = len(lens['cdrs']) > 3
-    self.iglm_model.vh_first = binder_kwargs.get("vh_first", True)
-    self.iglm_model.vl_len = binder_kwargs.get("vl_len", None)
-    self.iglm_model.vh_len = binder_kwargs.get("vh_len", None)
-    if self.iglm_model.is_scfv:
-        assert all(x is not None for x in [self.iglm_model.vl_len, self.iglm_model.vh_len]), "For scFv, vh_len and vl_len must be provided"
+    iglm_kwargs["is_scfv"] = len(lens['cdrs']) > 3
+
+    self.ablm_model = CustomIgLM(**iglm_kwargs)
+    if self.ablm_model.is_scfv:
+        assert all(x is not None for x in [self.ablm_model.vl_len, self.ablm_model.vh_len]), "For scFv, vh_len and vl_len must be provided"
+  
+
+  def prep_ablm(self, lens, **kwargs):
+    ablm_specific_kwargs = ["ablm_temp", "vh_first", "vh_len", "vl_len", "seed"]
+    ablm_kwargs = {k:kwargs.pop(k) for k in ablm_specific_kwargs if k in kwargs}
+
+    ablm_kwargs["is_scfv"] = len(lens['cdrs']) > 3
+
+    self.ablm_model = CustomAbLang(**ablm_kwargs)
+    if self.ablm_model.is_scfv:
+        assert all(x is not None for x in [self.ablm_model.vl_len, self.ablm_model.vh_len]), "For scFv, vh_len and vl_len must be provided"
 
   def _prep_fixbb(self, pdb_filename, chain=None,
                   copies=1, repeat=False, homooligomer=False,
@@ -207,6 +213,7 @@ class _af_prep:
                    pos=None,
                    dimer = False,
                    lens = None,
+                   ablm_model = "iglm",
 
                    hotspot=None, ignore_missing=True, **kwargs):
     '''
@@ -225,7 +232,6 @@ class _af_prep:
                         Can also be False which means it fixes the sequence an applies
                         changes only to a specific [pos]itions.
     -pos: positions to apply gradients to
-    -bias_esm/bias_iglm: Only allow one of them at a time. If True, use pLM to inform design
     -use_pos_distance: whether to calculate distance between binder-target using all of the 
                        target or only [pos] residues.
     -optimizer[str]: which optimizer to use (e.g. sgd, adam, etc)
@@ -325,7 +331,12 @@ class _af_prep:
       kwargs['bias_redesign'] = bias_redesign
 
     if optimizer: kwargs['optimizer'] = optimizer
-    self.prep_iglm(pos, lens, **kwargs) # self._pos_info["residue"] if pos is a string
+    if ablm_model == "iglm":
+      self.prep_iglm(lens, **kwargs)
+    elif ablm_model == "ablm":
+      self.prep_ablm(lens, **kwargs)
+    else:
+      raise ValueError(f"Invalid ablm_model: {ablm_model}")
     self._prep_model(**kwargs)
 
   def _prep_partial(self, pdb_filename, chain=None, length=None,

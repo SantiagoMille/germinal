@@ -358,7 +358,7 @@ During sampling, we typically run antibody generation until there are around 1,0
 
 **Tweaking Parameters:**
 
-Optimal design parameters are different for each target and antibody type! If you are experiencing low success rates, we recommend tweaking interface confidence weights (ipTM / iPAE), structure-based weights (helix, beta, framework loss), or the IgLM weights defined in `iglm_scale`.  In particular we recommend playing around with:
+Optimal design parameters are different for each target and antibody type! If you are experiencing low success rates, we recommend tweaking interface confidence weights (ipTM / iPAE), structure-based weights (helix, beta, framework loss), or the IgLM weights defined in `ablm_scale`.  In particular we recommend playing around with:
 
 ```python
 weights_plddt: 1.0
@@ -369,7 +369,7 @@ weights_beta: 0.1
 framework_contact_offset: 1
 ```
 
-`iglm_scale` is a key parameter that controls the influence of IgLM during different stages of the design process. `iglm_scale` is defined as a list of four scalar values: `[v_1,v_2,v_3,v_4]`. During the logits phase, iglm_scale increases linearly between v_1 and v_2. During the softmax phase, iglm_scale takes the value of v_3, and during the semi-greedy stage iglm_scale takes the value of v_4. 
+`ablm_scale` is a key parameter that controls the influence of IgLM during different stages of the design process. `ablm_scale` is defined as a list of four scalar values: `[v_1,v_2,v_3,v_4]`. During the logits phase, ablm_scale increases linearly between v_1 and v_2. During the softmax phase, ablm_scale takes the value of v_3, and during the semi-greedy stage ablm_scale takes the value of v_4. 
 
 Filters are also easily changeable in the filters configurations. To add or remove filters from the initial and final filtering rounds, simply create a new filter with the same name as the intended metric and specify the threshold value and the operator (<, >, =, etc).
 
