@@ -1,7 +1,8 @@
 import ablang2
+from ablang2.models.ablang2.vocab import ablang_vocab
 
 import numpy as np
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -30,6 +31,15 @@ class CustomAbLang(nn.Module):
         self._model = None
 
         self._aa = ['A','R','N','D','C','Q','E','G','H','I','L','K','M','F','P','S','T','W','Y','V']
+        # value at idx i is the ablang idx for the i-th aa
+        self.ablang_idx_mapping = [ablang_vocab[aa] for aa in self._aa]
+        mapping_matrix = torch.zeros(len(self._aa), len(ablang_vocab), dtype=torch.float32, device=self.device)
+        for idx, vocab_idx in enumerate(self.ablang_idx_mapping):
+            mapping_matrix[idx, vocab_idx] = 1.0
+        self.register_buffer("_aa_to_vocab_matrix", mapping_matrix)
+        self._ablang_idx_to_aa = {v: k for k, v in ablang_vocab.items()}    
+        self.chain_separator_idx = ablang_vocab['|']
+
         if seed is not None:
             torch.manual_seed(seed)
 
@@ -39,19 +49,57 @@ class CustomAbLang(nn.Module):
         self._model = ablang2.pretrained(model_to_use=model_to_use, random_init=False, device=self.device)
         self._model.freeze()
 
-    def _one_hot_from_logits(self, seq_logits: torch.Tensor) -> Tuple[torch.Tensor, str]:
-        """Return one-hot (L,20) with STE and corresponding sequence string."""
-        probs = F.softmax(seq_logits / self.tau, dim=-1)
-        idx = probs.argmax(dim=-1)
-        hard = F.one_hot(idx, num_classes=20).float()
-        one_hot = hard + (probs - probs.detach())
-        seq = ''.join(self._aa[i] for i in idx.detach().cpu().tolist())
-        if self.is_scfv:
-            # add | in between vh and vl
-            seq = seq[:self.vh_len] + '|' + seq[self.vh_len:]
-        return one_hot, seq
+    def _map_probs_to_vocab(self, probs: torch.Tensor) -> torch.Tensor:
+        """Map probabilities from ColabDesign residue order to AbLang vocabulary order."""
+        return probs @ self._aa_to_vocab_matrix
 
-    def get_grad(self, seq_logts) -> Tuple[np.ndarray, float]:
+    def _one_hot_from_logits(self, seq_logits: torch.Tensor) -> Tuple[torch.Tensor, str, torch.Tensor]:
+        """Return differentiable STE probabilities in AbLang vocab space, sequence string, and hard token ids."""
+        probs = F.softmax(seq_logits / self.tau, dim=-1)
+        mapped_probs = self._map_probs_to_vocab(probs)
+
+        vocab_size = mapped_probs.size(-1)
+        idx = mapped_probs.argmax(dim=-1)
+        hard = F.one_hot(idx, num_classes=vocab_size).float()
+        one_hot = hard + (mapped_probs - mapped_probs.detach())
+
+        seq_tokens = [self._ablang_idx_to_aa.get(token_id.item(), 'X') for token_id in idx.detach()]
+        seq = ''.join(seq_tokens)
+        return one_hot, seq, idx
+
+    def _insert_chain_separator(
+        self,
+        embeddings: torch.Tensor,
+        token_ids: torch.Tensor,
+        sequence: str,
+    ) -> Tuple[torch.Tensor, torch.Tensor, str]:
+        """Insert chain separator token embedding and id between VH and VL chains."""
+        if not self.is_scfv:
+            return embeddings, token_ids, sequence
+
+        assert self.vh_len and self.vl_len, "vh_len and vl_len must be set for scFv"
+        separator_embed = self._model.Ablang.get_aa_embeddings().weight[self.chain_separator_idx]
+        insert_pos = self.vh_len if self.vh_first else self.vl_len
+        updated_embeddings = torch.cat(
+            (
+                embeddings[:insert_pos],
+                separator_embed.unsqueeze(0),
+                embeddings[insert_pos:],
+            ),
+            dim=0,
+        )
+        updated_token_ids = torch.cat(
+            (
+                token_ids[:insert_pos],
+                torch.tensor([self.chain_separator_idx], device=self.device, dtype=torch.long),
+                token_ids[insert_pos:],
+            ),
+            dim=0,
+        )
+        updated_sequence = sequence[:insert_pos] + '|' + sequence[insert_pos:]
+        return updated_embeddings, updated_token_ids, updated_sequence
+
+    def get_grad(self, seq_logits: torch.Tensor) -> Tuple[np.ndarray, float]:
         """Compute gradient of loss with respect to sequence logits.
         Since the ablang model(s) are trained to take in the entire sequence, we can use the same logic
         for both vhh and scfv.
@@ -61,7 +109,6 @@ class CustomAbLang(nn.Module):
         """
         self._init_model()
         x = seq_logits
-        print(f"x: {x.shape}")
 
         if self.is_scfv:
             assert self.vh_len and self.vl_len, "vh_len and vl_len must be set for scFv"
@@ -70,23 +117,31 @@ class CustomAbLang(nn.Module):
             else:
                 x_l, x_h = x[:self.vl_len], x[-self.vh_len:]
             x = torch.cat([x_h, x_l], dim=0)
-        oh, s = self._one_hot_from_logits(x)
+        oh, s, hard_idx = self._one_hot_from_logits(x)
 
-        ### NOTE NEEDS WORK WITH TOKENIZATION
-        ### TODO:
-        # 1. map the colabdesign res idx i to ablang res idx j. create list where list[i] = j 
-        # 2. get embeds for each res from tokenizer
-        # 3. multiply 1 and 2 to get embeds for the colabdesign one hot seq
-        # 4. mutliply 3 with the one hot seq to get input embeds.
-        # 5. rewrite ablang forward to bypass the tokenizer and use (4)?
-        # 6. alternatively, use a hook that replaces the tokenizer layer (chatgpt suggestion). this seems way easier if it works.
-        with torch.no_grad():
-            logits = self._model.Ablang(oh)
-        ### END NOTE
+        embed_layer = self._model.Ablang.get_aa_embeddings()
+        residue_embeddings = oh @ embed_layer.weight
+        residue_token_ids = hard_idx.detach()
+        residue_embeddings, residue_token_ids, s = self._insert_chain_separator(
+            residue_embeddings,
+            residue_token_ids,
+            s,
+        )
+
+        token_ids = residue_token_ids.unsqueeze(0).to(self.device)
+        input_embeddings = residue_embeddings.unsqueeze(0)
+
+        def _embedding_hook(_module, _input, _output):
+            return input_embeddings
+
+        hook_handle = embed_layer.register_forward_hook(_embedding_hook)
+        try:
+            logits = self._model.Ablang(token_ids)
+        finally:
+            hook_handle.remove()
 
         shift_logits = logits[:, :-1, :]
-        full_target_ids = self._model.tokenizer.encode(s)  # get the ids
-        shift_labels = full_target_ids[:, 1:]
+        shift_labels = token_ids[:, 1:]
         loss = F.cross_entropy(
             shift_logits.reshape(-1, shift_logits.size(-1)),
             shift_labels.reshape(-1),

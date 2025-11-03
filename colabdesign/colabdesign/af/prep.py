@@ -50,13 +50,13 @@ class _af_prep:
         assert all(x is not None for x in [self.ablm_model.vl_len, self.ablm_model.vh_len]), "For scFv, vh_len and vl_len must be provided"
   
 
-  def prep_ablm(self, lens, **kwargs):
-    ablm_specific_kwargs = ["ablm_temp", "vh_first", "vh_len", "vl_len", "seed"]
-    ablm_kwargs = {k:kwargs.pop(k) for k in ablm_specific_kwargs if k in kwargs}
+  def prep_ablang(self, lens, **kwargs):
+    ablang_specific_kwargs = ["ablm_temp", "vh_first", "vh_len", "vl_len", "seed"]
+    ablang_kwargs = {k:kwargs.pop(k) for k in ablang_specific_kwargs if k in kwargs}
 
-    ablm_kwargs["is_scfv"] = len(lens['cdrs']) > 3
+    ablang_kwargs["is_scfv"] = len(lens['cdrs']) > 3
 
-    self.ablm_model = CustomAbLang(**ablm_kwargs)
+    self.ablm_model = CustomAbLang(**ablang_kwargs)
     if self.ablm_model.is_scfv:
         assert all(x is not None for x in [self.ablm_model.vl_len, self.ablm_model.vh_len]), "For scFv, vh_len and vl_len must be provided"
 
@@ -333,8 +333,8 @@ class _af_prep:
     if optimizer: kwargs['optimizer'] = optimizer
     if ablm_model == "iglm":
       self.prep_iglm(lens, **kwargs)
-    elif ablm_model == "ablm":
-      self.prep_ablm(lens, **kwargs)
+    elif ablm_model == "ablang":
+      self.prep_ablang(lens, **kwargs)
     else:
       raise ValueError(f"Invalid ablm_model: {ablm_model}")
     self._prep_model(**kwargs)
