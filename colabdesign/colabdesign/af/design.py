@@ -689,7 +689,7 @@ class _af_design:
 
       best = buff[np.argmin(losses)]
       self.aux, seq = best["aux"], jnp.array(best["seq"])
-      ablm_grad, ll = self.ablm_model.get_ablm_grad(np.eye(20)[best["seq"][0]].astype(np.float32))
+      _, ll = self.ablm_model.get_ablm_grad(np.eye(20)[best["seq"][0]].astype(np.float32))
       self.aux["log"]["ablm_ll"] = ll
 
       self.set_seq(seq=seq, bias=bias)

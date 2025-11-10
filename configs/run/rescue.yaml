@@ -3,18 +3,24 @@
 
 # General run settings
 type: "scfv"
-cdr_lengths: [8, 8, 13, 6, 6, 9] # heavy, then light
-fw_lengths: [25,17,38,52,17,33,10]
+cdr_lengths: [8, 8, 18, 9, 3, 9] # heavy, then light
+fw_lengths: [25,17,38,52,17,36,10]
 pregenerate_seeds: false
 vh_first: true
-vh_len: 120
-vl_len: 107
+vh_len: 125
+vl_len: 109
+protocol: "dual_binder"
+complex_path: ["pdbs/kp3-azd.pdb","pdbs/rbd-azd.pdb"]
+dual_grad_sum: False #if false use PCGrad
+clear_best_greedy: False #if true, takes seq from best design in soft but the final design gets chosen from Greedy
+is_recover: True
+recover_bias: 5
 
 # Loss function parameters
-weights_plddt: 0.5
-weights_i_plddt: 1.0
+weights_plddt: 0.5  #try 1
+weights_i_plddt: 1.2
 weights_pae_intra: 0.1
-weights_pae_inter: 0.5
+weights_pae_inter: 0.6
 weights_iptm: 0.75
 weights_con_intra: 0.1
 weights_con_inter: 0.2
@@ -30,20 +36,19 @@ framework_contact_loss: true
 framework_contact_offset: 1
 
 # Hallucination settings
-logits_steps: 60
-softmax_steps: 35
+logits_steps: 40
+softmax_steps: 15
 search_steps: 10
 search_mutation_rate: 0.05
-plddt_threshold: 0.8
-i_ptm_threshold: 0.67
-i_pae_threshold: 0.28
-seq_entropy_threshold: 0.10
+plddt_threshold: 0.86
+i_ptm_threshold: 0.75
+i_pae_threshold: 0.23
+seq_entropy_threshold: 0.085
 
 # IgLM settings
-ablm_model: "ablang"
 grad_merge_method: "pcgrad"
-ablm_scale: [0.0, 0.2, 0.4, 1.0]
-ablm_temp: 0.6
+iglm_scale: [0.1, 0.2, 0.4, 1.0]
+iglm_temp: 0.6
 iglm_species: "[HUMAN]"
 seq_init_mode: ["gumbel", "soft"]  # STATIC: Fixed list, no argparse option
 bias_redesign: 10
@@ -64,11 +69,11 @@ structure_model: "af3"
 msa_mode: "target"
 
 # AF3 configuration (required when structure_model == "af3")
-af3_repo_path: null
-af3_sif_path: null
-af3_model_dir: null
-af3_db_dir: null
-msa_db_dir: null
+af3_repo_path: "/large_storage/hielab/brk/models/alphafold3"
+af3_sif_path: "/large_storage/hielab/brk/models/alphafold3/alphafold3_latest.sif"
+af3_model_dir: "/large_storage/hielab/brk/models/af3_weights"
+af3_db_dir: "/large_storage/hielab/brk/databases/af3_dbs"
+msa_db_dir: "/large_storage/hielab/brk/databases/colabfold/"
 use_metagenomic_db: false
 
 # Template removal settings
@@ -77,6 +82,7 @@ rm_template_sc: false
 rm_binder: false
 rm_binder_seq: true
 rm_binder_sc: true
+rm_template_ic: true
 
 ###### REMAINING SETTINGS ######
 # These settings are typically not changed from run to run.
@@ -107,7 +113,7 @@ save_design_animations: false
 save_design_trajectory_plots: false
 
 # Other settings
-omit_AAs: false
+omit_AAs: "C"
 force_reject_AA: false
 dgram_cce: 0.01
 show_config: true

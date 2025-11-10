@@ -13,7 +13,7 @@ class CustomAbLang(nn.Module):
     """Minimal AbLang gradient wrapper (VHH via AbLang1, scFv via AbLang2)."""
 
     def __init__(self, 
-        scfv: bool = False,
+        is_scfv: bool = False,
         vh_first: bool = True,
         vh_len: Optional[int] = None,
         vl_len: Optional[int] = None,
@@ -24,7 +24,7 @@ class CustomAbLang(nn.Module):
         super().__init__()
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.tau = ablm_temp
-        self.is_scfv: bool = scfv
+        self.is_scfv: bool = is_scfv
         self.vh_first: bool = vh_first
         self.vh_len: Optional[int] = vh_len
         self.vl_len: Optional[int] = vl_len
@@ -43,11 +43,12 @@ class CustomAbLang(nn.Module):
         if seed is not None:
             torch.manual_seed(seed)
 
-    def _init_model(self) -> None:
+    def _init_model(self) -> str:
         """Load AbLang model (lazy)."""
         model_to_use = 'ablang2-paired' if self.is_scfv else 'ablang1-heavy'
         self._model = ablang2.pretrained(model_to_use=model_to_use, random_init=False, device=self.device)
         self._model.freeze()
+        return model_to_use
 
     def _map_probs_to_vocab(self, probs: torch.Tensor) -> torch.Tensor:
         """Map probabilities from ColabDesign residue order to AbLang vocabulary order."""
@@ -78,7 +79,7 @@ class CustomAbLang(nn.Module):
             return embeddings, token_ids, sequence
 
         assert self.vh_len and self.vl_len, "vh_len and vl_len must be set for scFv"
-        separator_embed = self._model.Ablang.get_aa_embeddings().weight[self.chain_separator_idx]
+        separator_embed = self._model.AbLang.get_aa_embeddings().weight[self.chain_separator_idx]
         insert_pos = self.vh_len if self.vh_first else self.vl_len
         updated_embeddings = torch.cat(
             (
@@ -107,7 +108,7 @@ class CustomAbLang(nn.Module):
         seq: dict with key "logits" or array-like of shape (L,20).
         Returns (gradient, likelihood / -loss).
         """
-        self._init_model()
+        model_to_use = self._init_model()
         x = seq_logits
 
         if self.is_scfv:
@@ -119,8 +120,12 @@ class CustomAbLang(nn.Module):
             x = torch.cat([x_h, x_l], dim=0)
         oh, s, hard_idx = self._one_hot_from_logits(x)
 
-        embed_layer = self._model.Ablang.get_aa_embeddings()
-        residue_embeddings = oh @ embed_layer.weight
+        if 'ablang1' in model_to_use:
+            embed_layer = self._model.AbRep.AbEmbeddings.AAEmbeddings
+            residue_embeddings = oh[:,:-2] @ embed_layer.weight
+        else:
+            embed_layer = self._model.AbLang.get_aa_embeddings()
+            residue_embeddings = oh @ embed_layer.weight
         residue_token_ids = hard_idx.detach()
         residue_embeddings, residue_token_ids, s = self._insert_chain_separator(
             residue_embeddings,
@@ -136,7 +141,7 @@ class CustomAbLang(nn.Module):
 
         hook_handle = embed_layer.register_forward_hook(_embedding_hook)
         try:
-            logits = self._model.Ablang(token_ids)
+            logits = self._model.AbLang(token_ids)
         finally:
             hook_handle.remove()
 
@@ -152,12 +157,23 @@ class CustomAbLang(nn.Module):
         loss = position_losses.mean()
         ll = -loss.item()
         grad = torch.autograd.grad(loss, x)[0]
-        return grad.detach().cpu().numpy(), ll
+        return grad.detach(), ll
 
     def get_ablm_grad(self, seq) -> Tuple[np.ndarray, float]:
         """Alias for get_grad for compatibility with existing pipelines."""
-        seq_logits = torch.tensor(seq["logits"][0] if isinstance(seq, dict) else seq, device=self.device, requires_grad=True)
+        current_logits = torch.tensor(seq["logits"][0] if isinstance(seq, dict) else seq, device=self.device, requires_grad=True)
 
-        return self.get_grad(seq_logits)
+        current_logits_h = current_logits[:self.vh_len, :]
+        current_logits_l = current_logits[-self.vl_len:, :]
+
+        grad, ll = self.get_grad(current_logits)
+
+        grad_h = grad[:self.vh_len, :]
+        grad_l = grad[-self.vl_len:, :]
+
+        logits_shape = current_logits.shape[0] - current_logits_h.shape[0] - current_logits_l.shape[0]
+        final_grad = torch.cat([grad_h, torch.zeros((logits_shape,20), device='cuda'), grad_l], dim=0)
+
+        return final_grad.cpu().numpy(), ll
 
 

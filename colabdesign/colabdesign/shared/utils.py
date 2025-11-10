@@ -72,12 +72,12 @@ def dict_to_str(x, filt=None, keys=None, ok=None, print_str=None, f=2):
         else:
           if k in ['i_ptm', 'i_con', 'pae', 'i_pae', 'plddt']:
             print_str += f" ** {k} {v:.{f}f} **"
-          elif k in ['af_grad','iglm_grad','total_grad']:
+          elif k in ['af_grad','iglm_grad','total_grad','ablm_grad']:
             continue
           else:#
             print_str += f" {k} {v:.{f}f}"
       else:
-        if k in ['af_grad','iglm_grad','total_grad']:
+        if k in ['af_grad','iglm_grad','total_grad','ablm_grad']:
           continue
         else:
           print_str += f" {k} {v}"

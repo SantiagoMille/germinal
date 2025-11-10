@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Optional
 
 class CustomIgLM(nn.Module, IgLM):
     """
@@ -62,10 +63,6 @@ class CustomIgLM(nn.Module, IgLM):
                 raise ValueError(f"Unrecognized amino acid token: {aa}")
             aa_ids.append(tid)
         self.amino_acid_ids = torch.tensor(aa_ids, device=self.device)
-
-        self.starting_binder_seq_tokens = [
-            self.tokenizer.convert_tokens_to_ids(aa) for aa in self.starting_binder_seq
-        ]
 
         self.chain_id = self.tokenizer.convert_tokens_to_ids(chain_token)
         self.species_id = self.tokenizer.convert_tokens_to_ids(self.species_token)

@@ -72,5 +72,7 @@ uv pip install jax==0.5.3
 uv pip install dm-haiku==0.0.13 
 uv pip install hydra-core omegaconf
 uv pip install "jax[cuda12_pip]==0.5.3" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+uv pip install ablang2 --no-deps
+uv pip install rotary_embedding_torch --no-deps 
 ```
 
