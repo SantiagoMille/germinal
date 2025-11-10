@@ -40,7 +40,7 @@ class _af_prep:
   
   def prep_iglm(self, lens, **kwargs):
     # set temp if temp is in kwargs
-    iglm_specific_kwargs = ["ablm_temp", "vh_first", "vh_len", "vl_len", "seed"]
+    iglm_specific_kwargs = ["ablm_temp", "vh_first", "vh_len", "vl_len", "seed", "iglm_spcies"]
     iglm_kwargs = {k:kwargs.pop(k) for k in iglm_specific_kwargs if k in kwargs}
 
     iglm_kwargs["is_scfv"] = len(lens['cdrs']) > 3
