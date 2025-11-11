@@ -162,18 +162,19 @@ class CustomAbLang(nn.Module):
     def get_ablm_grad(self, seq) -> Tuple[np.ndarray, float]:
         """Alias for get_grad for compatibility with existing pipelines."""
         current_logits = torch.tensor(seq["logits"][0] if isinstance(seq, dict) else seq, device=self.device, requires_grad=True)
-
-        current_logits_h = current_logits[:self.vh_len, :]
-        current_logits_l = current_logits[-self.vl_len:, :]
-
         grad, ll = self.get_grad(current_logits)
 
-        grad_h = grad[:self.vh_len, :]
-        grad_l = grad[-self.vl_len:, :]
+        if self.is_scfv:
+            current_logits_h = current_logits[:self.vh_len, :]
+            current_logits_l = current_logits[-self.vl_len:, :]
 
-        logits_shape = current_logits.shape[0] - current_logits_h.shape[0] - current_logits_l.shape[0]
-        final_grad = torch.cat([grad_h, torch.zeros((logits_shape,20), device='cuda'), grad_l], dim=0)
+            grad_h = grad[:self.vh_len, :]
+            grad_l = grad[-self.vl_len:, :]
 
+            logits_shape = current_logits.shape[0] - current_logits_h.shape[0] - current_logits_l.shape[0]
+            final_grad = torch.cat([grad_h, torch.zeros((logits_shape,20), device='cuda'), grad_l], dim=0)
+        else:
+            final_grad = grad
         return final_grad.cpu().numpy(), ll
 
 
