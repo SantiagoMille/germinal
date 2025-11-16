@@ -6,7 +6,7 @@ services:
   germinal:
     build:
       context: ..
-      dockerfile: Rayca-Code/Dockerfile
+      dockerfile: Dockerfile
     image: germinal:latest
     container_name: germinal
 
@@ -50,7 +50,7 @@ services:
   germinal-jupyter:
     build:
       context: ..
-      dockerfile: Rayca-Code/Dockerfile
+      dockerfile: Dockerfile
     image: germinal:latest
     container_name: germinal-jupyter
     profiles:
