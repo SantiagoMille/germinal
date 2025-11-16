@@ -62,7 +62,7 @@ RUN set -euxo pipefail; \
   # Core scientific packages
   uv pip install --system \
     pandas==2.2.2 \
-    matplotlib==3.8.5 \
+    matplotlib==3.8.4 \
     numpy==1.26.4 \
     biopython==1.83 \
     scipy==1.13.1 \
