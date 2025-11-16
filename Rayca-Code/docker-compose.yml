@@ -1,0 +1,84 @@
+# Germinal Docker Compose Configuration
+# V2 syntax (no version field)
+# Usage: docker compose -f Rayca-Code/docker-compose.yml up -d
+
+services:
+  germinal:
+    build:
+      context: ..
+      dockerfile: Rayca-Code/Dockerfile
+    image: germinal:latest
+    container_name: germinal
+
+    # GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    # Environment variables
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - PYTHONUNBUFFERED=1
+      - HYDRA_FULL_ERROR=1
+
+    # Persistent storage for results and custom PDB files
+    volumes:
+      - ../results:/workspace/results
+      - ../pdbs:/workspace/pdbs
+      # Optional: mount custom configs
+      # - ../configs:/workspace/configs
+
+    # Keep container running for interactive use
+    stdin_open: true
+    tty: true
+
+    # Working directory
+    working_dir: /workspace
+
+    # Resource limits (adjust based on your GPU)
+    # shm_size: "16gb"  # Increase if needed for large models
+
+    # Default command
+    command: bash
+
+  # Optional: Jupyter notebook service for testing
+  germinal-jupyter:
+    build:
+      context: ..
+      dockerfile: Rayca-Code/Dockerfile
+    image: germinal:latest
+    container_name: germinal-jupyter
+    profiles:
+      - jupyter
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - PYTHONUNBUFFERED=1
+
+    volumes:
+      - ../results:/workspace/results
+      - ../pdbs:/workspace/pdbs
+      - ../Rayca-Documents/Container-Tests:/workspace/tests
+
+    ports:
+      - "8888:8888"
+
+    working_dir: /workspace
+
+    command: >
+      bash -c "pip install jupyter nbconvert &&
+               jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root"
