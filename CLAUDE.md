@@ -20,12 +20,63 @@ python run_germinal.py max_trajectories=100 weights_plddt=1.5 experiment_name=my
 # Validate installation
 python validate_install.py
 
-# Docker
+# Docker (using Docker Compose V2)
+docker compose -f Rayca-Code/docker-compose.yml build germinal
+docker compose -f Rayca-Code/docker-compose.yml run --rm germinal bash
+
+# Alternative: direct Docker commands
 docker build -t germinal .
 docker run -it --rm --gpus all -v "$PWD/results:/workspace/results" germinal bash
 ```
 
 No test suite exists. Testing is done via `validate_install.py` and running the pipeline.
+
+## Containerization Details
+
+### Docker Image
+- **Base**: NVIDIA CUDA 12.4.1 + cuDNN on Ubuntu 22.04
+- **Size**: ~29GB (includes CUDA, PyRosetta 1.7GB, AF-Multimer params ~10GB)
+- **Python**: 3.10.19 via micromamba
+- **GPU**: Requires NVIDIA GPU with 40GB+ VRAM
+
+### Key Package Versions (from frozen build)
+- PyTorch: 2.6.0+cu124
+- JAX: 0.5.3 with CUDA 12 plugin
+- PyRosetta: 2025.45 (installed via pyrosetta-installer)
+- Chai-lab: 0.6.1
+- IgLM: 0.1.0
+- pandas: 2.3.3
+- Full list: `Rayca-Documents/installed_packages_frozen.txt`
+
+### Rayca Containerization Structure
+```
+Rayca-Code/
+├── Dockerfile                    # Enhanced Dockerfile (for future version pinning)
+└── docker-compose.yml           # V2 compose file with GPU support
+
+Rayca-Documents/
+├── InitialMegaPrompt.md          # Containerization requirements
+├── Germinal-Bug-Fixes-Log.md     # Bug fixes during containerization
+├── installed_packages_frozen.txt  # Exact package versions from build
+├── Container-Tests/              # Test notebooks
+│   ├── 01_Essential-Container-Functionality.ipynb
+│   └── 02_Full-Pipeline-Validation.ipynb
+├── Quick-Start-Guide.md          # Quick start (max 100 lines)
+├── Readme-EndUser.md             # For Docker beginners
+└── Readme-Administrator.md       # For DevOps engineers
+```
+
+### Docker Compose Usage
+```bash
+# Build image (first time, ~15-30 minutes)
+docker compose -f Rayca-Code/docker-compose.yml build germinal
+
+# Run interactive shell
+docker compose -f Rayca-Code/docker-compose.yml run --rm germinal bash
+
+# Run with Jupyter (for testing)
+docker compose -f Rayca-Code/docker-compose.yml --profile jupyter up germinal-jupyter
+```
 
 ## Architecture
 
