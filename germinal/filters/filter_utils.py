@@ -284,7 +284,7 @@ def build_filter_metrics(
         "external_plddt_binder": confidence_metrics["plddt_binder"],
         "external_chain_ptm": confidence_metrics["chain_ptm"],
         "external_binder_pae": confidence_metrics["binder_pae"],
-        "ipsae": confidence_metrics["ipsae"]["ipsae"],
+        "ipsae": confidence_metrics["ipsae"]["ipsae"] if confidence_metrics["ipsae"] is not None else None,
         # structure + interface
         "binder_near_hotspot": binder_near_hotspot,
         "clashes_unrelaxed": num_clashes_trajectory,
@@ -330,7 +330,7 @@ def build_filter_metrics(
         "binder_near_hotspot": binder_near_hotspot,
         # derived confidence
         "pdockq2": pdockq_metrics["pDockQ2"],
-        "ipsae_pdockq2": confidence_metrics["ipsae"]["pdockq2"],
+        "ipsae_pdockq2": confidence_metrics["ipsae"]["pdockq2"] if confidence_metrics["ipsae"] is not None else None,
         "lis_lis": lis_metrics["lis"],
         "lis_lia": lis_metrics["lia"],
         # secondary structure + framework metrics

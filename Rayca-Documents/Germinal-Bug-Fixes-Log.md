@@ -43,22 +43,55 @@ During full pipeline validation testing on A100 80GB GPU. Error occurs after:
 - Structure prediction runs
 
 **Root Cause:**
-Code bug in ipsae branch metrics filtering phase. Likely attempting to access an attribute or index on a None value returned from structure prediction or metrics calculation.
+In `germinal/filters/filter_utils.py`, the `run_structure_prediction()` function (line 476) returns different values depending on the structure prediction model:
+- **AF3 model** (lines 504-515): Returns `(external_pdb, external_metrics, ipsae)` with ipsae score
+- **Chai model** (lines 516-532): Returns only `(external_pdb, external_metrics)`, leaving ipsae as `None` (default from line 503)
+
+The `build_filter_metrics()` function then attempts to access `confidence_metrics["ipsae"]["ipsae"]` and `confidence_metrics["ipsae"]["pdockq2"]` without checking if ipsae is None, causing the TypeError.
+
+**Fix Applied:**
+Modified `germinal/filters/filter_utils.py` to add null safety checks:
+
+**Line 287** (original):
+```python
+"ipsae": confidence_metrics["ipsae"]["ipsae"],
+```
+
+**Line 287** (fixed):
+```python
+"ipsae": confidence_metrics["ipsae"]["ipsae"] if confidence_metrics["ipsae"] is not None else None,
+```
+
+**Rationale:** When using Chai (instead of AF3) for structure prediction, ipsae scores are not computed. The conditional expression safely handles this by returning `None` when ipsae data is unavailable, rather than attempting to subscript a NoneType object.
+
+**Line 333** (original):
+```python
+"ipsae_pdockq2": confidence_metrics["ipsae"]["pdockq2"],
+```
+
+**Line 333** (fixed):
+```python
+"ipsae_pdockq2": confidence_metrics["ipsae"]["pdockq2"] if confidence_metrics["ipsae"] is not None else None,
+```
+
+**Rationale:** Same issue - accessing pdockq2 from ipsae dictionary when ipsae is None. The fix provides consistency by setting both ipsae metrics to None when using Chai model.
 
 **Impact:**
 - Container infrastructure is NOT affected - all dependencies work correctly
-- Hallucination, redesign, and structure prediction stages complete successfully
-- Bug prevents final metrics calculation and filtering
+- Fix enables pipeline completion for both AF3 and Chai structure prediction models
+- ipsae and ipsae_pdockq2 metrics will be `None` when using Chai (expected behavior)
 
-**Workaround:**
-Pipeline successfully generates antibody structures. Manual inspection of output PDBs is possible while bug is fixed.
+**Files Modified:**
+- `germinal/filters/filter_utils.py` (lines 287, 333)
 
-**Files Affected:**
-- Likely in `germinal/filters/` metrics calculation code
-- Not a containerization issue - exists in ipsae branch codebase
+**Testing:**
+- Rebuilt Docker image with fix (cached build: ~2 minutes)
+- Ran full pipeline test: `max_trajectories=1 experiment_name=bug_fix_test`
+- Result: Exit code 0 (success), no TypeError, completed in 5m 48s
+- Pipeline correctly handled None ipsae values without crashing
 
-**Validation Results Despite Bug:**
-- Generated PDB structures: 157KB-306KB
-- Relaxed structures created
-- Structure predictions completed
+**Validation Results After Fix:**
+- Full pipeline completes without errors
+- All stages work: Hallucination → Filtering → Structure Prediction → Metrics
 - GPU memory usage: ~40GB on A100 80GB
+- Pipeline runtime: ~6 minutes per trajectory
