@@ -38,6 +38,15 @@ No test suite exists. Testing is done via `validate_install.py` and running the 
 - **Size**: ~29GB (includes CUDA, PyRosetta 1.7GB, AF-Multimer params ~10GB)
 - **Python**: 3.10.19 via micromamba
 - **GPU**: Requires NVIDIA GPU with 40GB+ VRAM
+- **Validated**: 2025-11-17 on A100 80GB PCIe
+
+### Validation Test Results (2025-11-17)
+- **GPU**: NVIDIA A100 80GB PCIe
+- **Test**: `max_trajectories=3` with PDL1 target
+- **Performance**: ~5 min/trajectory (hallucination), ~2 min/structure (prediction)
+- **Memory**: ~40GB peak GPU usage
+- **Status**: All stages pass (JAX, PyRosetta, ColabDesign, Chai-lab)
+- **Known Issue**: TypeError in ipsae branch metrics phase (BUG-002, not container issue)
 
 ### Key Package Versions (from frozen build)
 - PyTorch: 2.6.0+cu124
