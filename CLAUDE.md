@@ -40,13 +40,14 @@ No test suite exists. Testing is done via `validate_install.py` and running the 
 - **GPU**: Requires NVIDIA GPU with 40GB+ VRAM
 - **Validated**: 2025-11-17 on A100 80GB PCIe
 
-### Validation Test Results (2025-11-17)
+### Validation Test Results
 - **GPU**: NVIDIA A100 80GB PCIe
-- **Test**: `max_trajectories=3` with PDL1 target
-- **Performance**: ~5 min/trajectory (hallucination), ~2 min/structure (prediction)
+- **Initial Test (2025-11-17)**: `max_trajectories=3` with PDL1 target
+- **Comprehensive Test (2025-11-19)**: `max_trajectories=5` with PDL1 target (completed, 39m 15s total)
+- **Performance**: 4-8 min/trajectory (hallucination), ~2 min/sequence (structure prediction)
 - **Memory**: ~40GB peak GPU usage
-- **Status**: All stages pass (JAX, PyRosetta, ColabDesign, Chai-lab)
-- **Known Issue**: TypeError in ipsae branch metrics phase (BUG-002, not container issue)
+- **Status**: Container infrastructure fully operational, complete pipeline validated
+- **BUG-002**: Fixed and fully validated - 4 AbMPNN sequences tested through Chai structure prediction without crashes
 
 ### Key Package Versions (from frozen build)
 - PyTorch: 2.6.0+cu124

@@ -85,13 +85,34 @@ Modified `germinal/filters/filter_utils.py` to add null safety checks:
 - `germinal/filters/filter_utils.py` (lines 287, 333)
 
 **Testing:**
+
+**Initial Test (2025-11-17):**
 - Rebuilt Docker image with fix (cached build: ~2 minutes)
-- Ran full pipeline test: `max_trajectories=1 experiment_name=bug_fix_test`
+- Ran single trajectory test: `max_trajectories=1 experiment_name=bug_fix_test`
 - Result: Exit code 0 (success), no TypeError, completed in 5m 48s
 - Pipeline correctly handled None ipsae values without crashing
 
+**Comprehensive Multi-Trajectory Test (2025-11-19):**
+- Completed: `max_trajectories=5 experiment_name=comprehensive_test`
+- Total runtime: 39 minutes 15 seconds
+- Results summary:
+  - Trajectory 1: Completed hallucination (7m 43s), failed initial filters
+  - Trajectory 2: Completed hallucination (4m 28s), failed initial filters
+  - Trajectory 3: Failed early (low softmax metrics, 3m 6s)
+  - Trajectory 4: Failed early (low initial metrics, 2m 1s)
+  - Trajectory 5: **PASSED INITIAL FILTERS** → Generated 4 AbMPNN redesigned sequences → All processed through Chai structure prediction
+- **CRITICAL VALIDATION**: Trajectory 5 triggered the exact BUG-002 code path:
+  - 4 AbMPNN sequences ran final filtering with Chai structure prediction
+  - Each sequence executed 199 diffusion steps (~33s per sequence)
+  - All accessed `confidence_metrics["ipsae"]` without crashing
+  - Fix correctly handled None values from Chai model
+- **No TypeError crashes observed** in any trajectory or redesign sequence
+- Final disposition: 0 designs accepted, 8 failed final filters, 2 failed initial design
+
 **Validation Results After Fix:**
-- Full pipeline completes without errors
-- All stages work: Hallucination → Filtering → Structure Prediction → Metrics
-- GPU memory usage: ~40GB on A100 80GB
-- Pipeline runtime: ~6 minutes per trajectory
+- ✅ **BUG-002 fix fully validated** - Critical code path (lines 287, 333) exercised successfully
+- ✅ Pipeline completed without crashes across 5 trajectories + 4 AbMPNN redesigns
+- ✅ All stages execute correctly: Hallucination → Initial Filtering → AbMPNN Redesign → Chai Structure Prediction → Final Metrics
+- ✅ CSV output files generated correctly with ipsae columns (handled None values)
+- GPU memory usage: ~40GB peak on A100 80GB
+- Pipeline performance: 4-8 min/trajectory (hallucination), ~2 min/sequence (structure prediction)

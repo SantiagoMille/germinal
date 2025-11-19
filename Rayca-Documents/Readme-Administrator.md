@@ -214,17 +214,29 @@ CUDA_VISIBLE_DEVICES=1 python run_germinal.py experiment_name=run2 &
 
 **Test Configuration:**
 - GPU: NVIDIA A100 80GB PCIe
-- Date: 2025-11-17
-- Test: `max_trajectories=3` with PDL1 target
+- Initial test: 2025-11-17 (`max_trajectories=3` with PDL1 target)
+- Comprehensive test: 2025-11-19 (`max_trajectories=5` with PDL1 target, completed 39m 15s)
 
-**Results:**
-- Hallucination phase: ~5 minutes per trajectory (65 design iterations)
-- Structure prediction: ~2 minutes per structure
+**Validated Results:**
+- Hallucination phase: 4-8 minutes per trajectory (65 design iterations)
+- Structure prediction: ~2 minutes per sequence (Chai model, 199 diffusion steps)
 - GPU memory usage: ~40GB peak
 - PDB structure sizes: 150-310KB
-- All stages completed successfully (JAX, PyRosetta, Chai-lab, ColabDesign)
+- Multi-trajectory execution: Stable across 5 trajectories + 4 AbMPNN redesigns
+- All pipeline stages validated: Hallucination → Initial Filtering → AbMPNN Redesign → Chai Structure Prediction → Final Metrics
 
-**Note:** A TypeError in ipsae branch metrics phase (BUG-002) does not affect container infrastructure. See [Germinal-Bug-Fixes-Log.md](Germinal-Bug-Fixes-Log.md).
+**Testing Status:**
+- ✅ Container infrastructure fully operational
+- ✅ Multi-trajectory stability validated (9 total structure predictions)
+- ✅ **BUG-002 fix fully validated** - Chai structure prediction with None ipsae values tested successfully
+- ✅ Complete pipeline execution: 1 trajectory passed initial filters, generated 4 redesigns, all processed without errors
+
+**BUG-002 Validation:**
+- Fixed TypeError in [filter_utils.py:287,333](../germinal/filters/filter_utils.py)
+- Tested with 4 AbMPNN sequences through Chai structure prediction
+- All sequences accessed ipsae metrics without crashing
+- CSV output correctly handles None values
+- See [Germinal-Bug-Fixes-Log.md](Germinal-Bug-Fixes-Log.md) for detailed test results
 
 ---
 
