@@ -30,6 +30,7 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
 - [Output Format](#output-format)
 - [Tips for Design](#tips-for-design)
 - [Designing against PD-L1 and IL3](#design-against-pdl1-il3)
+- [Troubleshooting](#troubleshooting)
 - [Bugfix Changelog](#bugfix-changelog)
 - [Citation](#citation)
 - [Acknowledgments](#acknowledgments)
@@ -406,6 +407,10 @@ PD-L1 scFV (not experimentally validated yet) config:
 ```bash
 python -u run_germinal.py run=scfv_pdl1 experiment_name=pdl1_scfv filter/initial=scfv_pdl1 filter/final=scfv_pdl1 target=pdl1
 ```
+
+<!-- TOC --><a name="troubleshooting"></a>
+## Troubleshooting
+- We have occassionally observed OOM errors when using AbLang 1-heavy to design VHHs. If you are experiencing this error, try lowering the amount of memory Jax preallocates to 0.5 with `export XLA_CLIENT_MEM_FRACTION=0.5` or ` XLA_CLIENT_MEM_FRACTION=0.5 python run_germinal.py [args]`.
 
 <!-- TOC --><a name="bugfix-changelog"></a>
 ## Bugfix Changelog
