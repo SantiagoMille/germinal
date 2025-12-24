@@ -276,6 +276,7 @@ def build_filter_metrics(
     Returns:
         Dict[str, Any]: Confidence, interface, structural, biological, and sequence metrics
     """
+    ipsae = confidence_metrics["ipsae"]
     metrics = {
         # confidence
         "external_plddt": confidence_metrics["plddt"],
@@ -288,7 +289,7 @@ def build_filter_metrics(
         "external_plddt_binder": confidence_metrics["plddt_binder"],
         "external_chain_ptm": confidence_metrics["chain_ptm"],
         "external_binder_pae": confidence_metrics["binder_pae"],
-        "ipsae": confidence_metrics["ipsae"]["ipsae"],
+        "ipsae": None if ipsae is None else ipsae["ipsae"],
         # structure + interface
         "binder_near_hotspot": binder_near_hotspot,
         "clashes_unrelaxed": num_clashes_trajectory,
@@ -334,7 +335,7 @@ def build_filter_metrics(
         "binder_near_hotspot": binder_near_hotspot,
         # derived confidence
         "pdockq2": pdockq_metrics["pDockQ2"],
-        "ipsae_pdockq2": confidence_metrics["ipsae"]["pdockq2"],
+        "ipsae_pdockq2": None if ipsae is None else ipsae["pdockq2"],
         "lis_lis": lis_metrics["lis"],
         "lis_lia": lis_metrics["lia"],
         # secondary structure + framework metrics
