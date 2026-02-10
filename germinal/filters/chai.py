@@ -114,6 +114,7 @@ def run_chai(
     output_dir = Path(os.path.join(output_dir, "tmp", hash_id, "outputs"))
     output_dir.mkdir(exist_ok=False)
 
+    constraint = False
     if cdr3_idx is not None and hotspot_residue is not None:
         constraint = True
         constraint_path = Path(__file__).with_name("chai.restraints")
