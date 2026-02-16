@@ -311,8 +311,8 @@ def extract_protenix_scores(
     # can parse it.  The ipsae tool detects CIF+JSON as "af3" format and
     # expects keys "atom_plddts" (0-100 scale) and "pae" (token-level NxN).
     # Protenix's full_data uses "atom_plddt" (0-1 scale) and "token_pair_pae".
-    # NOTE: need_atom_confidence must be True in Protenix's configs_inference.py
-    # for full_data files (with the PAE matrix) to be written.
+    # NOTE: need_atom_confidence defaults to True in Protenix >= v1.0.0
+    # (configs_inference.py), so full_data files are written automatically.
     ipsae = None
     try:
         has_full_data = (
@@ -422,9 +422,8 @@ def _run_protenix(
         json.dump(input_json, f, indent=2)
 
     # Build Protenix command.
-    # IMPORTANT: need_atom_confidence must be set to True in the Protenix
-    # conda env's configs_inference.py for full_data files (PAE matrix) to
-    # be written, which is required for ipSAE calculation.
+    # need_atom_confidence defaults to True in Protenix >= v1.0.0, so
+    # full_data files (PAE matrix) are written automatically.
     conda_env = run_settings.get("protenix_conda_env", "protenix")
     model_name = run_settings.get(
         "protenix_model_name", "protenix_base_default_v1.0.0"

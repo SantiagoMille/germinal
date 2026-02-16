@@ -324,12 +324,14 @@ def germinal_design(
         else:
             io.update_failures("Trajectory_softmax_pLDDT")
             print(
-                "Softmax trajectory metrics too low to continue: ",
+                "Softmax trajectory metrics too low or sequence entropy too high to continue: ",
                 str(softmax_plddt),
                 "/",
                 str(softmax_iptm),
                 "/",
                 str(softmax_ipae),
+                "/",
+                str(af_model._tmp["best"]["mean_soft_pseudo"]),
             )
             fail_confidence = True
     else:

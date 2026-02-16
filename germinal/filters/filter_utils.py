@@ -166,6 +166,8 @@ def run_filters(
 
     # ========================== Calculate pDockQ, pDockQ2, LIS/LIA ==========================
     pae_matrix = external_metrics.get("pae_matrix", np.array([[0.0]]))
+    if not isinstance(pae_matrix, np.ndarray):
+        pae_matrix = np.array(pae_matrix)
     has_valid_pae = pae_matrix.size > 1
 
     if has_valid_pae:
