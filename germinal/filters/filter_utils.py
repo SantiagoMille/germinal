@@ -419,8 +419,10 @@ def evaluate_filters(
         threshold = filter_config["value"]
         operator = filter_config["operator"]
 
-        # Evaluate based on operator
-        if operator == "<":
+        if metric_value is None:
+            print(f"\n\nWarning: Metric '{filter_name}' is None, passing filter {filter_name}!!\n\n")
+            passed = True
+        elif operator == "<":
             passed = metric_value < threshold
         elif operator == "<=":
             passed = metric_value <= threshold

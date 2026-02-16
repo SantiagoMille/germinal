@@ -10,6 +10,7 @@
 #SBATCH --error=jobs/vhh_pdl1-%j.err
 #SBATCH --requeue
 
+export XLA_CLIENT_MEM_FRACTION=0.5
 python -u run_germinal.py run=vhh_pdl1 experiment_name=pdl1_vhh filter/initial=vhh_pdl1 filter/final=vhh_pdl1 target=pdl1
 
 #Example for running with multi-chain target (e.g. insulin)
