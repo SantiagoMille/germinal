@@ -53,7 +53,7 @@ clear_best: true
 mpnn_fix_interface: true
 num_seqs: 40
 max_mpnn_sequences: 5
-sampling_temp: 0.1
+sampling_temp: 0.2
 backbone_noise: 0.0
 model_path: "abmpnn"
 mpnn_weights: "abmpnn"
@@ -61,6 +61,7 @@ mpnn_weights: "abmpnn"
 # Structure prediction settings
 structure_model: "af3"
 msa_mode: "target"
+af3_structure_select_mode: "worst"
 
 # AF3 configuration (required when structure_model == "af3")
 af3_repo_path: null
@@ -69,6 +70,10 @@ af3_model_dir: null
 af3_db_dir: null
 msa_db_dir: null
 use_metagenomic_db: false
+
+# Protenix configuration (required when structure_model == "protenix")
+protenix_conda_env: "protenix"                          # conda environment with protenix installed
+protenix_model_name: "protenix_base_default_v1.0.0"     # model checkpoint name
 
 # Template removal settings
 rm_template_seq: true

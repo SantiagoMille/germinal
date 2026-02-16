@@ -375,7 +375,7 @@ def generate_msas(
     return input_json_data
 
 
-def extract_structure_and_scores(output_dir, design_name, binder_chain):
+def extract_structure_and_scores(output_dir, design_name, binder_chain, select_mode="best"):
     """
     Extract predicted structure and confidence scores from AF3 output.
 
@@ -386,29 +386,63 @@ def extract_structure_and_scores(output_dir, design_name, binder_chain):
     Args:
         output_dir (str): Directory containing AF3 output folder.
         design_name (str): Name identifier for the design.
+        binder_chain (str): Chain ID for the binder protein.
+        select_mode (str): Which sample to select from the AF3 output.
+            - "best": Use the top-ranked sample (AF3 default, top-level files).
+            - "worst": Use the lowest-ranked sample based on ranking_score
+              from the ranking_scores.csv file.
+            Defaults to "best".
 
     Returns:
-        tuple: (pdb_path, scores_dict) where:
+        tuple: (pdb_path, scores_dict, ipsae) where:
             - pdb_path (str): Path to converted PDB structure file
             - scores_dict (dict): Confidence metrics including pLDDT, PAE, pTM, iPTM
+            - ipsae (dict or None): ipSAE, pDockQ2, and LIS scores if available
     """
 
     af3_results_folder = os.path.join(output_dir, design_name)
+
+    if select_mode == "worst":
+        # Read ranking_scores.csv to find the worst (lowest ranking_score) sample
+        ranking_csv = os.path.join(
+            af3_results_folder, f"{design_name}_ranking_scores.csv"
+        )
+        ranking_df = pd.read_csv(ranking_csv)
+        worst_row = ranking_df.loc[ranking_df["ranking_score"].idxmin()]
+        seed = int(worst_row["seed"])
+        sample = int(worst_row["sample"])
+        sample_subfolder = f"seed-{seed}_sample-{sample}"
+        sample_prefix = f"{design_name}_{sample_subfolder}"
+        sample_folder = os.path.join(af3_results_folder, sample_subfolder)
+
+        af3_structure = os.path.join(sample_folder, f"{sample_prefix}_model.cif")
+        summary_confidences = os.path.join(
+            sample_folder, f"{sample_prefix}_summary_confidences.json"
+        )
+        full_confidences = os.path.join(
+            sample_folder, f"{sample_prefix}_confidences.json"
+        )
+        print(
+            f"Selected worst sample for {design_name}: {sample_subfolder} "
+            f"(ranking_score={worst_row['ranking_score']:.4f})"
+        )
+    else:
+        # Default: use top-level files (best sample, already selected by AF3)
+        af3_structure = os.path.join(af3_results_folder, f"{design_name}_model.cif")
+        summary_confidences = os.path.join(
+            af3_results_folder, f"{design_name}_summary_confidences.json"
+        )
+        full_confidences = os.path.join(
+            af3_results_folder, f"{design_name}_confidences.json"
+        )
+
     # Convert mmCIF structure file to PDB format for compatibility
-    af3_structure = os.path.join(af3_results_folder, f"{design_name}_model.cif")
     pdb_path = os.path.join(output_dir, f"{design_name}_af3.pdb")
     parser = PDB.MMCIFParser(QUIET=True)
     io = PDB.PDBIO()
     structure = parser.get_structure("structure", af3_structure)
     io.set_structure(structure)
     io.save(pdb_path)
-    # Extract confidence scores from AF3 JSON output files
-    summary_confidences = os.path.join(
-        af3_results_folder, f"{design_name}_summary_confidences.json"
-    )
-    full_confidences = os.path.join(
-        af3_results_folder, f"{design_name}_confidences.json"
-    )
     af3_scores = {}
     with open(summary_confidences, "r") as f:
         summary_metrics = json.load(f)
@@ -462,6 +496,7 @@ def _run_af3(
     binder_chain: str,
     msa_mode: str,
     run_settings: dict,
+    select_mode: str = "best",
 ) -> tuple:
     """
     Execute AlphaFold3 structure prediction via Singularity container.
@@ -475,11 +510,13 @@ def _run_af3(
         binder_chain (str): Chain identifier for the binder protein.
         msa_mode (str): MSA generation mode ("none", "local", "colabfold", "target").
         run_settings (dict): Configuration containing all AF3 paths and settings.
+        select_mode (str): Which sample to extract ("best" or "worst").
 
     Returns:
-        tuple: (pdb_path, scores_dict) where:
+        tuple: (pdb_path, scores_dict, ipsae) where:
             - pdb_path (str): Path to predicted structure in PDB format
             - scores_dict (dict): Confidence metrics and scores
+            - ipsae (dict or None): ipSAE, pDockQ2, and LIS scores if available
     """
     # Verify output directory exists
     if not os.path.isdir(output_dir):
@@ -550,7 +587,9 @@ def _run_af3(
     if return_code:
         raise subprocess.CalledProcessError(return_code, run_cmds)
 
-    pdb_path, scores, ipsae = extract_structure_and_scores(output_dir, input_json["name"], binder_chain)
+    pdb_path, scores, ipsae = extract_structure_and_scores(
+        output_dir, input_json["name"], binder_chain, select_mode=select_mode
+    )
 
     return pdb_path, scores, ipsae
 
@@ -565,6 +604,7 @@ def run_af3(
     run_settings: dict,
     binder_chain: str = "B",
     msa_mode: str = "none",
+    select_mode: str = "best",
 ):
     """
     Run AlphaFold3 structure prediction for antibody-target complex.
@@ -594,11 +634,16 @@ def run_af3(
             - 'colabfold': Use ColabFold remote API
             - 'target': Generate MSA only for target protein
             Defaults to 'none'.
+        select_mode (str, optional): Which sample to extract from AF3 output.
+            - 'best': Use the top-ranked sample (AF3 default).
+            - 'worst': Use the lowest-ranked sample by ranking_score.
+            Defaults to 'best'.
 
     Returns:
-        tuple: (pdb_path, scores_dict) where:
+        tuple: (pdb_path, scores_dict, ipsae) where:
             - pdb_path (str): Path to predicted complex structure (PDB format)
             - scores_dict (dict): Confidence metrics including pLDDT, PAE, pTM, iPTM
+            - ipsae (dict or None): ipSAE, pDockQ2, and LIS scores if available
     """
 
     input_json_data = create_input_dict(
@@ -610,6 +655,7 @@ def run_af3(
         binder_chain=binder_chain,
         msa_mode=msa_mode,
         run_settings=run_settings,
+        select_mode=select_mode,
     )
 
 

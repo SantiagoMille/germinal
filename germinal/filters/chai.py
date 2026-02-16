@@ -111,7 +111,8 @@ def run_chai(
         fh.write(binder_sequence + "\n")
 
     # Create empty output directory (required by Chai-1 inference)
-    output_dir = Path(os.path.join(output_dir, "tmp", hash_id, "outputs"))
+    tmp_dir = Path(os.path.join(output_dir, "tmp", hash_id))
+    output_dir = tmp_dir / "outputs"
     output_dir.mkdir(exist_ok=False)
 
     constraint = False
@@ -175,7 +176,7 @@ def run_chai(
     shutil.copy(pdb_path, save_dir)
     new_path = os.path.join(save_dir, pdb_path.split("/")[-1])
 
-    shutil.rmtree(os.path.join(output_dir, "tmp", hash_id), ignore_errors=True)
+    shutil.rmtree(str(tmp_dir), ignore_errors=True)
 
     return new_path, scores_dict
 

@@ -9,7 +9,7 @@ from typing import Any, Dict, Tuple, Sequence, Set, Union, List
 import numpy as np
 from iglm import IgLM
 from germinal.utils import utils
-from germinal.filters import af3, chai, pDockQ, pyrosetta_utils
+from germinal.filters import af3, chai, protenix, pDockQ, pyrosetta_utils
 from germinal.utils.io import IO, Trajectory
 
 
@@ -161,11 +161,26 @@ def run_filters(
     )
 
     # ========================== Calculate pDockQ, pDockQ2, LIS/LIA ==========================
-    pdockq_metrics, lis_metrics, pDockQ2_out = compute_pdockq_and_lis(
-        external_pdb=external_pdb,
-        external_metrics=external_metrics,
-        binder_chain=binder_chain,
-    )
+    pae_matrix = external_metrics.get("pae_matrix", np.array([[0.0]]))
+    has_valid_pae = pae_matrix.size > 1
+
+    if has_valid_pae:
+        pdockq_metrics, lis_metrics, pDockQ2_out = compute_pdockq_and_lis(
+            external_pdb=external_pdb,
+            external_metrics=external_metrics,
+            binder_chain=binder_chain,
+        )
+        i_pae = pDockQ2_out["ifpae_norm"].mean()
+        i_plddt = pDockQ2_out["ifplddt"].mean() / 100
+    else:
+        # PAE matrix not available (e.g. Protenix without full_data output).
+        # Use ipsae values if available, otherwise defaults.
+        pdockq_metrics = {"pDockQ2": ipsae["pdockq2"] if ipsae else 0.0}
+        lis_metrics = {"lis": ipsae.get("LIS", 0.0) if ipsae else 0.0, "lia": 0.0}
+        pDockQ2_out = None
+        i_pae = None
+        i_plddt = None
+        print("Warning: PAE matrix not available, using ipsae metrics for pDockQ2/LIS")
 
     # ========================== Aggregate Confidence Metrics ==========================
     confidence_metrics = {
@@ -176,8 +191,8 @@ def run_filters(
         "chain_ptm": external_metrics["chain_ptm"][-1],
         "pae": external_metrics["pae"].item(),
         "aggregate_score": external_metrics["aggregate_score"][0],
-        "i_pae": pDockQ2_out["ifpae_norm"].mean(),
-        "i_plddt": (pDockQ2_out["ifplddt"].mean() / 100),
+        "i_pae": i_pae,
+        "i_plddt": i_plddt,
         "binder_pae": external_metrics["binder_pae"].item(),
         "ipsae":ipsae
     }
@@ -517,6 +532,7 @@ def run_structure_prediction(
             run_settings,
             binder_chain=binder_chain,
             msa_mode=run_settings["msa_mode"],
+            select_mode=run_settings["af3_structure_select_mode"],
         )
     elif run_settings["structure_model"] == "chai":
 
@@ -535,9 +551,22 @@ def run_structure_prediction(
             binder_chain=binder_chain,
             target_len=target_len,
         )
+    elif run_settings["structure_model"] == "protenix":
+        external_pdb, external_metrics, ipsae = protenix.run_protenix(
+            trajectory_sequence,
+            target_sequence,
+            target_chain,
+            structures_directory,
+            design_name,
+            af3_seed,
+            run_settings,
+            binder_chain=binder_chain,
+            msa_mode=run_settings["msa_mode"],
+            select_mode=run_settings.get("af3_structure_select_mode", "best"),
+        )
     else:
         raise ValueError(
-            f"Structure model {run_settings['structure_model']} not supported, select either af3 or chai"
+            f"Structure model {run_settings['structure_model']} not supported, select either af3, chai, or protenix"
         )
 
     return external_pdb, external_metrics, ipsae
