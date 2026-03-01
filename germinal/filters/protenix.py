@@ -23,6 +23,21 @@ from typing import Union, List
 from Bio import PDB
 
 
+def _unwrap(val):
+    """Unwrap Protenix's single-element list serialization.
+
+    Protenix's ``save_json`` converts tensors via ``.tolist()``.  A shape-[1]
+    tensor becomes ``[value]`` and shape-[1, N] becomes ``[[v0, v1, ...]]``.
+    This helper normalises both cases so downstream code receives plain
+    scalars or 1-D lists, matching what the AF3 pipeline expects.
+    """
+    if isinstance(val, list) and len(val) == 1 and isinstance(val[0], list):
+        return val[0]          # [[v0, v1, ...]] → [v0, v1, ...]
+    if isinstance(val, list) and len(val) == 1:
+        return val[0]          # [value] → value
+    return val
+
+
 def create_protenix_input(
     binder_seq: str,
     target_seq: Union[str, List[str]],
@@ -263,9 +278,11 @@ def extract_protenix_scores(
     # ---- Build scores dict compatible with AF3 output format ----
     scores = {}
 
-    # pLDDT - Protenix stores on 0-1 scale (unlike AF3 which uses 0-100)
-    scores["plddt"] = np.float64(summary.get("plddt", 0))
-    chain_plddt = summary.get("chain_plddt", [])
+    # pLDDT - Protenix summary "plddt" is 0-100 scale (atom_plddt.mean()*100);
+    # normalize to 0-1 to match AF3 scores dict convention.
+    scores["plddt"] = np.float64(_unwrap(summary.get("plddt", 0))) / 100.0
+    # chain_plddt is already 0-1 scale (averaged from atom_plddt without *100)
+    chain_plddt = _unwrap(summary.get("chain_plddt", []))
     if len(chain_plddt) > binder_chain_idx:
         scores["plddt_binder"] = np.float64(chain_plddt[binder_chain_idx])
     else:
@@ -297,15 +314,15 @@ def extract_protenix_scores(
         scores["binder_pae"] = np.float64(0.0)
 
     # Chain pair PAE min - use chain_pair_gpde as approximation
-    chain_pair_gpde = summary.get("chain_pair_gpde", [[0.0]])
+    chain_pair_gpde = _unwrap(summary.get("chain_pair_gpde", [[0.0]]))
     scores["chain_pair_pae_min"] = np.array(chain_pair_gpde)
 
     # pTM and iPTM
-    scores["ptm"] = [summary.get("ptm", 0.0)]
-    scores["iptm"] = [summary.get("iptm", 0.0)]
-    scores["chain_iptm"] = np.array(summary.get("chain_iptm", [0.0]))
-    scores["chain_ptm"] = np.array(summary.get("chain_ptm", [0.0]))
-    scores["aggregate_score"] = [summary.get("ranking_score", 0.0)]
+    scores["ptm"] = [_unwrap(summary.get("ptm", 0.0))]
+    scores["iptm"] = [_unwrap(summary.get("iptm", 0.0))]
+    scores["chain_iptm"] = np.array(_unwrap(summary.get("chain_iptm", [0.0])))
+    scores["chain_ptm"] = np.array(_unwrap(summary.get("chain_ptm", [0.0])))
+    scores["aggregate_score"] = [_unwrap(summary.get("ranking_score", 0.0))]
 
     # ipSAE - create AF3-compatible JSON from Protenix data so the ipsae tool
     # can parse it.  The ipsae tool detects CIF+JSON as "af3" format and
