@@ -263,11 +263,11 @@ def extract_protenix_scores(
     # ---- Build scores dict compatible with AF3 output format ----
     scores = {}
 
-    # pLDDT - Protenix stores as 0-100 scale; normalize to 0-1 to match AF3
-    scores["plddt"] = np.float64(summary.get("plddt", 0)) / 100.0
+    # pLDDT - Protenix stores on 0-1 scale (unlike AF3 which uses 0-100)
+    scores["plddt"] = np.float64(summary.get("plddt", 0))
     chain_plddt = summary.get("chain_plddt", [])
     if len(chain_plddt) > binder_chain_idx:
-        scores["plddt_binder"] = np.float64(chain_plddt[binder_chain_idx]) / 100.0
+        scores["plddt_binder"] = np.float64(chain_plddt[binder_chain_idx])
     else:
         scores["plddt_binder"] = scores["plddt"]
 
