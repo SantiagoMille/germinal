@@ -37,7 +37,7 @@ RUN set -euxo pipefail; \
   python -m pip install --upgrade pip wheel setuptools; \
   python -m pip install uv; \
   uv pip install --system pandas matplotlib numpy biopython scipy seaborn tqdm ffmpeg py3dmol \
-    chex dm-haiku dm-tree joblib ml-collections immutabledict optax cvxopt mdtraj colabfold; \
+    chex dm-haiku dm-tree joblib ml-collections immutabledict optax cvxopt mdtraj colabfold ipsae; \
   uv pip install --system -e /workspace/colabdesign; \
   uv pip install --system --index-url "${TORCH_INDEX_URL}" \
     "torch==${TORCH_VERSION}" \
@@ -61,6 +61,8 @@ RUN set -euxo pipefail; \
   if [ "${JAX_CUDA}" = "true" ]; then \
     uv pip install --system "jax[cuda12_pip]==0.5.3" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html; \
   fi; \
+  uv pip install ablang2 --system --no-deps; \
+  uv pip install rotary_embedding_torch --system --no-deps; \
   true
 
 # download pyrosetta
