@@ -13,8 +13,13 @@ from colabdesign.shared.prep import prep_pos
 from colabdesign.shared.utils import copy_dict
 from colabdesign.shared.model import order_aa
 
-from colabdesign.iglm.model import CustomIgLM
-from colabdesign.ablang.model import CustomAbLang
+def _lazy_iglm():
+    from colabdesign.iglm.model import CustomIgLM
+    return CustomIgLM
+
+def _lazy_ablang():
+    from colabdesign.ablang.model import CustomAbLang
+    return CustomAbLang
 
 resname_to_idx = residue_constants.resname_to_idx
 idx_to_resname = dict((v,k) for k,v in resname_to_idx.items())
@@ -45,7 +50,7 @@ class _af_prep:
 
     iglm_kwargs["is_scfv"] = len(lens['cdrs']) > 3
 
-    self.ablm_model = CustomIgLM(**iglm_kwargs)
+    self.ablm_model = _lazy_iglm()(**iglm_kwargs)
     if self.ablm_model.is_scfv:
         assert all(x is not None for x in [self.ablm_model.vl_len, self.ablm_model.vh_len]), "For scFv, vh_len and vl_len must be provided"
   
@@ -56,7 +61,7 @@ class _af_prep:
 
     ablang_kwargs["is_scfv"] = len(lens['cdrs']) > 3
 
-    self.ablm_model = CustomAbLang(**ablang_kwargs)
+    self.ablm_model = _lazy_ablang()(**ablang_kwargs)
     if self.ablm_model.is_scfv:
         assert all(x is not None for x in [self.ablm_model.vl_len, self.ablm_model.vh_len]), "For scFv, vh_len and vl_len must be provided"
 
