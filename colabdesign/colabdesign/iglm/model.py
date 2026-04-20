@@ -39,19 +39,11 @@ class CustomIgLM(nn.Module, IgLM):
         super().__init__()
         IgLM.__init__(self, model_name=model_name)
 
-        # transformers>=5 ignores `vocab_file=` for BertTokenizer(BertTokenizerFast) and loads a minimal vocab.
-        # This breaks IgLM, because we expect amino-acid tokens like "A" to exist.
+        from iglm.model.IgLM import VOCAB_FILE as IGLM_VOCAB_FILE
         try:
-            from iglm.model.IgLM import VOCAB_FILE as IGLM_VOCAB_FILE  # type: ignore
-            self.tokenizer = transformers.BertTokenizerFast(
-                vocab=IGLM_VOCAB_FILE,
-                do_lower_case=False,
-            )
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to override IgLM tokenizer using vocab file '{IGLM_VOCAB_FILE}'. "
-                "This is required for transformers==5.3.0 compatibility."
-            ) from e
+            self.tokenizer = transformers.BertTokenizerFast(vocab=IGLM_VOCAB_FILE, do_lower_case=False)
+        except TypeError:
+            self.tokenizer = transformers.BertTokenizerFast(vocab_file=IGLM_VOCAB_FILE, do_lower_case=False)
 
         if device is not None:
             self.device = device
