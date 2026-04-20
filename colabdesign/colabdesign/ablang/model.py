@@ -12,13 +12,13 @@ import torch.nn.functional as F
 class CustomAbLang(nn.Module):
     """Minimal AbLang gradient wrapper (VHH via AbLang1, scFv via AbLang2)."""
 
-    def __init__(self, 
+    def __init__(self,
         is_scfv: bool = False,
         vh_first: bool = True,
         vh_len: Optional[int] = None,
         vl_len: Optional[int] = None,
-        ablm_temp: float = 1.0, 
-        device: Optional[torch.device] = None, 
+        ablm_temp: float = 1.0,
+        device: Optional[torch.device] = None,
         seed: Optional[int] = 0) -> None:
         """Configure temperature and device; set scFv split attributes externally."""
         super().__init__()
@@ -37,14 +37,16 @@ class CustomAbLang(nn.Module):
         for idx, vocab_idx in enumerate(self.ablang_idx_mapping):
             mapping_matrix[idx, vocab_idx] = 1.0
         self.register_buffer("_aa_to_vocab_matrix", mapping_matrix)
-        self._ablang_idx_to_aa = {v: k for k, v in ablang_vocab.items()}    
+        self._ablang_idx_to_aa = {v: k for k, v in ablang_vocab.items()}
         self.chain_separator_idx = ablang_vocab['|']
 
         if seed is not None:
             torch.manual_seed(seed)
 
     def _init_model(self) -> str:
-        """Load AbLang model (lazy)."""
+        """Load AbLang model (lazy, cached)."""
+        if self._model is not None:
+            return 'ablang2-paired' if self.is_scfv else 'ablang1-heavy'
         model_to_use = 'ablang2-paired' if self.is_scfv else 'ablang1-heavy'
         self._model = ablang2.pretrained(model_to_use=model_to_use, random_init=False, device=self.device)
         self._model.freeze()
@@ -74,30 +76,43 @@ class CustomAbLang(nn.Module):
         token_ids: torch.Tensor,
         sequence: str,
     ) -> Tuple[torch.Tensor, torch.Tensor, str]:
-        """Insert chain separator token embedding and id between VH and VL chains."""
+        """Insert BOS/EOS around each chain and chain separator between VH and VL: <VH>|<VL>."""
         if not self.is_scfv:
             return embeddings, token_ids, sequence
 
         assert self.vh_len and self.vl_len, "vh_len and vl_len must be set for scFv"
-        separator_embed = self._model.AbLang.get_aa_embeddings().weight[self.chain_separator_idx]
+        w = self._model.AbLang.get_aa_embeddings().weight
+        bos_embed = w[0].unsqueeze(0)    # '<' idx=0
+        eos_embed = w[22].unsqueeze(0)   # '>' idx=22
+        sep_embed = w[25].unsqueeze(0)   # '|' idx=25
+
         insert_pos = self.vh_len if self.vh_first else self.vl_len
-        updated_embeddings = torch.cat(
-            (
-                embeddings[:insert_pos],
-                separator_embed.unsqueeze(0),
-                embeddings[insert_pos:],
-            ),
-            dim=0,
-        )
-        updated_token_ids = torch.cat(
-            (
-                token_ids[:insert_pos],
-                torch.tensor([self.chain_separator_idx], device=self.device, dtype=torch.long),
-                token_ids[insert_pos:],
-            ),
-            dim=0,
-        )
-        updated_sequence = sequence[:insert_pos] + '|' + sequence[insert_pos:]
+
+        # Produces: < VH > | < VL >
+        updated_embeddings = torch.cat((
+            bos_embed,
+            embeddings[:insert_pos],
+            eos_embed,
+            sep_embed,
+            bos_embed,
+            embeddings[insert_pos:],
+            eos_embed,
+        ), dim=0)
+
+        bos_id = torch.tensor([0],  device=self.device, dtype=torch.long)
+        eos_id = torch.tensor([22], device=self.device, dtype=torch.long)
+        sep_id = torch.tensor([25], device=self.device, dtype=torch.long)
+        updated_token_ids = torch.cat((
+            bos_id,
+            token_ids[:insert_pos],
+            eos_id,
+            sep_id,
+            bos_id,
+            token_ids[insert_pos:],
+            eos_id,
+        ), dim=0)
+
+        updated_sequence = '<' + sequence[:insert_pos] + '>|<' + sequence[insert_pos:] + '>'
         return updated_embeddings, updated_token_ids, updated_sequence
 
     def get_grad(self, seq_logits: torch.Tensor) -> Tuple[np.ndarray, float]:
@@ -133,8 +148,22 @@ class CustomAbLang(nn.Module):
             s,
         )
 
-        token_ids = residue_token_ids.unsqueeze(0).to(self.device)
-        input_embeddings = residue_embeddings.unsqueeze(0)
+        if 'ablang1' in model_to_use:
+            # AbLang1 (VHH): wrap bare residue sequence with BOS '<' (0) and EOS '>' (22)
+            bos_emb = embed_layer.weight[0].unsqueeze(0)
+            eos_emb = embed_layer.weight[22].unsqueeze(0)
+            input_embeddings = torch.cat(
+                [bos_emb, residue_embeddings, eos_emb], dim=0
+            ).unsqueeze(0)
+            bos_id = torch.tensor([[0]],  device=self.device, dtype=torch.long)
+            eos_id = torch.tensor([[22]], device=self.device, dtype=torch.long)
+            token_ids = torch.cat(
+                [bos_id, residue_token_ids.unsqueeze(0), eos_id], dim=1
+            )
+        else:
+            # AbLang2 (scFv): BOS/EOS already inserted by _insert_chain_separator
+            token_ids = residue_token_ids.unsqueeze(0).to(self.device)
+            input_embeddings = residue_embeddings.unsqueeze(0)
 
         def _embedding_hook(_module, _input, _output):
             return input_embeddings
@@ -172,9 +201,7 @@ class CustomAbLang(nn.Module):
             grad_l = grad[-self.vl_len:, :]
 
             logits_shape = current_logits.shape[0] - current_logits_h.shape[0] - current_logits_l.shape[0]
-            final_grad = torch.cat([grad_h, torch.zeros((logits_shape,20), device='cuda'), grad_l], dim=0)
+            final_grad = torch.cat([grad_h, torch.zeros((logits_shape, 20), device=self.device), grad_l], dim=0)
         else:
             final_grad = grad
         return final_grad.cpu().numpy(), ll
-
-
