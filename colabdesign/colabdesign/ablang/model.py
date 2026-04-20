@@ -86,7 +86,8 @@ class CustomAbLang(nn.Module):
         eos_embed = w[22].unsqueeze(0)   # '>' idx=22
         sep_embed = w[25].unsqueeze(0)   # '|' idx=25
 
-        insert_pos = self.vh_len if self.vh_first else self.vl_len
+        # embeddings are always VH-first here (get_grad reorders x = cat([x_h, x_l]))
+        insert_pos = self.vh_len
 
         # Produces: < VH > | < VL >
         updated_embeddings = torch.cat((
@@ -194,14 +195,15 @@ class CustomAbLang(nn.Module):
         grad, ll = self.get_grad(current_logits)
 
         if self.is_scfv:
-            current_logits_h = current_logits[:self.vh_len, :]
-            current_logits_l = current_logits[-self.vl_len:, :]
-
             grad_h = grad[:self.vh_len, :]
             grad_l = grad[-self.vl_len:, :]
 
-            logits_shape = current_logits.shape[0] - current_logits_h.shape[0] - current_logits_l.shape[0]
-            final_grad = torch.cat([grad_h, torch.zeros((logits_shape, 20), device=self.device), grad_l], dim=0)
+            logits_shape = current_logits.shape[0] - self.vh_len - self.vl_len
+            zeros = torch.zeros((logits_shape, 20), device=self.device)
+            if self.vh_first:
+                final_grad = torch.cat([grad_h, zeros, grad_l], dim=0)
+            else:
+                final_grad = torch.cat([grad_l, zeros, grad_h], dim=0)
         else:
             final_grad = grad
         return final_grad.cpu().numpy(), ll
