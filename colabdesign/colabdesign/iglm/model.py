@@ -161,7 +161,7 @@ class CustomIgLM(nn.Module, IgLM):
           iglm_grad_l, ll_l = self._get_iglm_grad(current_logits_l, chain='[LIGHT]')
           
           logits_shape = current_logits.shape[0] - current_logits_h.shape[0] - current_logits_l.shape[0]
-          iglm_grad = torch.cat([iglm_grad_h, torch.zeros((logits_shape,20), device='cuda'), iglm_grad_l], dim=0)
+          iglm_grad = torch.cat([iglm_grad_h, torch.zeros((logits_shape, 20), device=self.device), iglm_grad_l], dim=0)
 
           ll = np.sum([ll_l,ll_h])
 
