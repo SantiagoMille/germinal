@@ -141,7 +141,6 @@ def _get_or_generate_msas(
     from germinal.filters.af3 import (
         generate_local_msa,
         call_generate_colabfold_msa_with_timeout,
-        remove_a3m_insertions,
     )
 
     msa_paths = {}
