@@ -308,11 +308,15 @@ msa_db_dir: "/path/to/colabfold/databases"
 <!-- TOC --><a name="protenix"></a>
 ### Protenix Configuration
 
-[Protenix](https://github.com/bytedance/Protenix) is an open-source reimplementation of AlphaFold 3 by ByteDance. It can be used as an alternative structure prediction backend alongside AF3 and Chai. Protenix has dependencies that conflict with the main `germinal` environment, so it must be installed in a **separate conda environment**. The pipeline invokes it via `conda run -n <env>`.
+[Protenix](https://github.com/bytedance/Protenix) is an open-source reimplementation of AlphaFold 3 by ByteDance. It can be used as an alternative structure prediction backend alongside AF3 and Chai. **AF3 remains the recommended backend** — all published filter thresholds are calibrated against AF3 and Protenix has not been independently validated. Use Protenix when AF3 is not available (e.g. no Singularity/license access), but treat results as experimental.
+
+Protenix has dependencies that conflict with the main `germinal` environment, so it must be installed in a **separate conda environment**. The pipeline invokes it via `conda run -n <env>`.
 
 ```bash
 conda create --name protenix python=3.10 && conda activate protenix && pip install protenix
 ```
+
+Before running, download the model weights by following the [Protenix model download instructions](https://github.com/bytedance/Protenix?tab=readme-ov-file#model-weights). The `protenix_model_name` field must match the downloaded checkpoint name exactly.
 
 To use Protenix, set `structure_model: "protenix"` in your run config (or pass `structure_model=protenix` on the CLI) and configure the two required fields:
 
@@ -321,7 +325,11 @@ protenix_conda_env: "protenix"                       # conda env with protenix i
 protenix_model_name: "protenix_base_default_v1.0.0"  # model checkpoint name
 ```
 
-Optional speed tuning parameters (can also be set via CLI): `protenix_use_msa` (default `true`; set `false` to skip built-in MSA search), `protenix_samples` (default `5`), `protenix_cycles` (default `10`), `protenix_steps` (default `200`).
+Optional speed tuning parameters (can also be set via CLI): `protenix_use_msa` (default `true`), `protenix_samples` (default `5`), `protenix_cycles` (default `10`), `protenix_steps` (default `200`).
+
+> **`protenix_use_msa`**: Setting this to `false` skips Protenix's built-in MSA search (~3 min per prediction). For de novo antibody design there are typically no real homologs, so this is often acceptable for speed. However, disabling MSA may reduce confidence score accuracy — use `false` for faster runs and `true` when confidence quality is the priority.
+
+> **Known limitation**: When Protenix does not produce full PAE matrix output, interface metrics (`i_pae`, `i_plddt`) are unavailable and any filters on those metrics will be automatically passed. A warning is printed when this occurs.
 
 <!-- TOC --><a name="score-selection"></a>
 ### Structure Score Selection Mode
