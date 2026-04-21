@@ -60,7 +60,7 @@ mpnn_weights: "abmpnn"
 
 # Structure prediction settings
 structure_model: "af3"
-af3_structure_select_mode: "worst"  # or "worst"
+af3_structure_select_mode: "worst"  # or "best"
 msa_mode: "target"
 
 # AF3 configuration (required when structure_model == "af3")
