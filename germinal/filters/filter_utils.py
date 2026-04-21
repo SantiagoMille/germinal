@@ -420,6 +420,9 @@ def evaluate_filters(
         operator = filter_config["operator"]
 
         if metric_value is None:
+            # Known limitation: i_pae and i_plddt are None when the structure predictor
+            # does not return a full PAE matrix (e.g. Protenix without full_data output).
+            # Filters on these metrics are skipped rather than failing the design.
             print(f"\n\nWarning: Metric '{filter_name}' is None, passing filter {filter_name}!!\n\n")
             passed = True
         elif operator == "<":

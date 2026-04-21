@@ -480,16 +480,15 @@ def _run_protenix(
     popen = subprocess.Popen(
         run_cmds,
         stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
         universal_newlines=True,
     )
-    for line in popen.stdout:
-        continue #print(line, end="")
-
-    popen.stdout.close()
-    return_code = popen.wait()
+    _, stderr_data = popen.communicate()
+    return_code = popen.returncode
 
     if return_code:
+        if stderr_data:
+            print(f"Protenix stderr:\n{stderr_data}")
         raise subprocess.CalledProcessError(return_code, run_cmds)
 
     pdb_path, scores, ipsae = extract_protenix_scores(

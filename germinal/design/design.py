@@ -331,7 +331,7 @@ def germinal_design(
                 "/",
                 str(softmax_ipae),
                 "/",
-                str(af_model._tmp["best"]["mean_soft_pseudo"]),
+                str(af_model._tmp["best"].get("mean_soft_pseudo", "N/A")),
             )
             fail_confidence = True
     else:
