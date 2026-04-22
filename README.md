@@ -293,6 +293,16 @@ binder_near_hotspot:
   operator: '=='
 ```
 
+**Multi-relax ensemble (`multi_relax`):** by default Germinal runs a single PyRosetta FastRelax per structure. Setting `multi_relax: true` runs `n_relax` relaxations in parallel and selects the best result by interface score, giving a more stable energy estimate. `relax_score_mode` controls aggregation (`"average"` or `"best"`; default `"average"`):
+
+```yaml
+multi_relax: true
+n_relax: 5
+relax_score_mode: "average"
+```
+
+**AbLang sequence score (`lm_ll`):** the `lm_ll` column in `designs.csv` is the AbLang pseudo-log-likelihood of the final sequence — each residue is masked once and scored against full bidirectional context. Higher values indicate more natural antibody sequences. Uses AbLang1 for VHH and AbLang2 for scFv. Computed automatically for all accepted designs; useful as a post-hoc ranking criterion.
+
 <!-- TOC --><a name="af3"></a>
 ### AF3 Configuration
 
