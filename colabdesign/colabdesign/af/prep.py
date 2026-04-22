@@ -51,8 +51,13 @@ class _af_prep:
   
 
   def prep_ablang(self, lens, **kwargs):
-    ablang_specific_kwargs = ["ablm_temp", "ablm_method", "vh_first", "vh_len", "vl_len", "seed"]
+    ablang_specific_kwargs = ["ablm_temp", "ablm_method", "vh_first", "vh_len", "vl_len", "seed", "ablm_device"]
     ablang_kwargs = {k:kwargs.pop(k) for k in ablang_specific_kwargs if k in kwargs}
+    if ablang_kwargs.get("ablm_device") is not None:
+        import torch
+        ablang_kwargs["device"] = torch.device(ablang_kwargs.pop("ablm_device"))
+    else:
+        ablang_kwargs.pop("ablm_device", None)
 
     ablang_kwargs["is_scfv"] = len(lens['cdrs']) > 3
 

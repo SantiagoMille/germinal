@@ -39,8 +39,10 @@ i_ptm_threshold: 0.68
 i_pae_threshold: 0.27
 seq_entropy_threshold: 0.10
 
-# IgLM settings
+# AbLM settings
 grad_merge_method: "pcgrad"
+ablm_model: "ablang"
+ablm_method: "pll"
 ablm_scale: [0.0, 0.2, 0.4, 1.0]
 ablm_temp: 0.6
 iglm_species: "[HUMAN]"

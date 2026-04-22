@@ -203,43 +203,53 @@ class CustomAbLang(nn.Module):
         grad = torch.autograd.grad(total_loss, x)[0]
         return grad.detach(), -mean_nll
 
-    def get_grad_pll(self, seq_logits: torch.Tensor) -> Tuple[np.ndarray, float]:
-        """Batched masked PLL gradient (Salazar-style).
+    def get_grad_pll(self, seq_logits: torch.Tensor, chunk_size: int = None) -> Tuple[np.ndarray, float]:
+        """Masked PLL gradient (Salazar-style), chunked to bound peak GPU memory.
 
-        Runs L masked sequences in a single batched forward pass (batch_size = n_aa).
-        Batch item j has position aa_positions[j] replaced by [MASK]; all other positions
-        use the soft differentiable embeddings. CE is summed over all masked positions.
+        Processes AA positions in chunks of chunk_size. Each chunk runs a forward
+        pass at batch_size=chunk_size with the masked embeddings. Pred logits are
+        accumulated across chunks; a single backward pass computes the gradient.
 
-        Memory: n_aa × seq_len × embed_dim  (~6 GB for L=130 on a 40 GB GPU).
+        Default chunk_size: 8 for scFv (AbLang2, L~242), 16 for VHH (AbLang1, L~130).
         """
+        if chunk_size is None:
+            chunk_size = 8 if self.is_scfv else 16
         embed_layer, token_ids, input_embeddings, aa_positions, x = self._build_inputs(seq_logits)
 
         L = aa_positions.shape[0]
         seq_len = input_embeddings.shape[1]
         mask_emb = embed_layer.weight[ablang_vocab['*']].detach()  # [embed_dim]
 
-        # pos_is_masked[j, p] = True iff position p is masked in batch item j
-        pos_idx = torch.arange(seq_len, device=self.device)            # [seq_len]
-        pos_is_masked = pos_idx.unsqueeze(0) == aa_positions.unsqueeze(1)  # [L, seq_len]
+        batch_token_ids = token_ids.expand(L, -1)  # [L, seq_len] — integer ids, no grad
 
-        emb_expanded  = input_embeddings.expand(L, -1, -1)                  # [L, seq_len, D]
-        mask_expanded = mask_emb.view(1, 1, -1).expand(L, seq_len, -1)     # [L, seq_len, D]
-        batch_input   = torch.where(pos_is_masked.unsqueeze(-1), mask_expanded, emb_expanded)
+        all_pred_logits = []
+        for start in range(0, L, chunk_size):
+            end = min(start + chunk_size, L)
+            chunk_aa_pos = aa_positions[start:end]   # [chunk]
+            chunk_len    = end - start
 
-        batch_token_ids = token_ids.expand(L, -1)  # [L, seq_len]
+            pos_idx       = torch.arange(seq_len, device=self.device)
+            chunk_masked  = pos_idx.unsqueeze(0) == chunk_aa_pos.unsqueeze(1)  # [chunk, seq_len]
+            emb_chunk     = input_embeddings.expand(chunk_len, -1, -1)          # [chunk, seq_len, D]
+            mask_chunk    = mask_emb.view(1, 1, -1).expand(chunk_len, seq_len, -1)
+            chunk_input   = torch.where(chunk_masked.unsqueeze(-1), mask_chunk, emb_chunk)
 
-        def _batch_hook(_m, _i, _o):
-            return batch_input
+            def _make_hook(ci):
+                def _hook(_m, _i, _o):
+                    return ci
+                return _hook
 
-        hook = embed_layer.register_forward_hook(_batch_hook)
-        try:
-            batch_logits = self._model.AbLang(batch_token_ids)  # [L, seq_len, vocab]
-        finally:
-            hook.remove()
+            hook = embed_layer.register_forward_hook(_make_hook(chunk_input))
+            try:
+                chunk_logits = self._model.AbLang(batch_token_ids[start:end])  # [chunk, seq_len, vocab]
+            finally:
+                hook.remove()
 
-        # Gather prediction at each masked position
-        pred_logits = batch_logits[torch.arange(L, device=self.device), aa_positions, :]  # [L, vocab]
-        labels      = token_ids[0, aa_positions]                                           # [L]
+            chunk_idx = torch.arange(chunk_len, device=self.device)
+            all_pred_logits.append(chunk_logits[chunk_idx, chunk_aa_pos, :])  # [chunk, vocab]
+
+        pred_logits = torch.cat(all_pred_logits, dim=0)   # [L, vocab]
+        labels      = token_ids[0, aa_positions]           # [L]
         total_loss  = F.cross_entropy(pred_logits, labels, reduction='sum')
         mean_nll    = total_loss.item() / L
         grad = torch.autograd.grad(total_loss, x)[0]
@@ -342,15 +352,16 @@ class CustomAbLang(nn.Module):
 
         return -float(np.mean(per_pos_nll))
 
-    def get_ablm_grad(self, seq, method: str = 'pll') -> Tuple[np.ndarray, float]:
+    def get_ablm_grad(self, seq, method: str = 'pll', pll_chunk_size: int = None) -> Tuple[np.ndarray, float]:
         """Compute AbLang gradient for the hallucination loop.
 
         Args:
-            seq:    logits dict (with key 'logits') or raw array, shape (..., seq_len, 20)
-            method: 'pll'      — Salazar-style batched masked PLL (all positions in one batch,
-                                 equivalent to one forward pass at batch_size=L; default)
-                    'unmasked' — fast aligned CE (one forward pass, not true PLL)
-                    'mlm'      — random-subset MLM, stochastic (one forward pass)
+            seq:            logits dict (with key 'logits') or raw array, shape (..., seq_len, 20)
+            method:         'pll'      — Salazar-style masked PLL, chunked (default)
+                            'unmasked' — fast aligned CE (one forward pass, not true PLL)
+                            'mlm'      — random-subset MLM, stochastic (one forward pass)
+            pll_chunk_size: positions per forward pass for 'pll'; None → auto (8 for scFv,
+                            16 for VHH). Override to tune memory/speed tradeoff.
         """
         if method is None:
             method = self.ablm_method
@@ -361,7 +372,7 @@ class CustomAbLang(nn.Module):
         )
 
         if method == 'pll':
-            grad, ll = self.get_grad_pll(current_logits)
+            grad, ll = self.get_grad_pll(current_logits, chunk_size=pll_chunk_size)
         elif method == 'mlm':
             grad, ll = self.get_grad_mlm(current_logits)
         else:

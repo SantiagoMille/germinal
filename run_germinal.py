@@ -130,7 +130,7 @@ def main(cfg: DictConfig):
         # First filter check - cofold and check basic structural filters
         # ====================================================================================
         print("Running initial cofolding filters")
-        filter_metrics, filter_results, pass_initial_filters, final_struct = (
+        filter_metrics, filter_results, pass_initial_filters, final_struct, _ = (
             filter_utils.run_filters(
                 trajectory,
                 run_settings,
@@ -190,7 +190,7 @@ def main(cfg: DictConfig):
                 
                 # run final set of filters on AbMPNN redesigned sequences
                 print("Running final filters on AbMPNN redesigned sequences")
-                filter_metrics, filter_results, accepted, final_struct = (
+                filter_metrics, filter_results, accepted, final_struct, _ = (
                     filter_utils.run_filters(
                         mpnn_trajectory,
                         run_settings,

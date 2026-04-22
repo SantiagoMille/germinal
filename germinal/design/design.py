@@ -93,6 +93,7 @@ def germinal_design(
     iglm_species = run_settings.get("iglm_species", "[HUMAN]")
     ablm_model = run_settings.get("ablm_model", "iglm")
     ablm_method = run_settings.get("ablm_method", "pll")
+    ablm_device = run_settings.get("ablm_device", None)
     dimer = target_settings.get("dimer", False)
     save_filters = {
         "plddt": run_settings.get("plddt_threshold", 0.84),
@@ -162,6 +163,7 @@ def germinal_design(
         ablm_temp=ablm_temp,
         ablm_model=ablm_model,
         ablm_method=ablm_method,
+        ablm_device=ablm_device,
         iglm_species=iglm_species,
         vl_len=vl_len,
         vh_first=vh_first,

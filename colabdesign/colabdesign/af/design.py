@@ -336,7 +336,7 @@ class _af_design:
              models=models, backprop=backprop, callback=callback)
     
     effective_length = None
-    ablm_grad, ll = self.ablm_model.get_ablm_grad(self.aux["seq"])
+    ablm_grad, ll = self.ablm_model.get_ablm_grad(self.aux["seq"], method=self.ablm_model.ablm_method)
 
     self.aux["log"]["af_grad"] = np.array(self.aux["grad"]["seq"])
     self.aux["log"]["ablm_grad"] = np.zeros(self.aux["grad"]["seq"].shape)
