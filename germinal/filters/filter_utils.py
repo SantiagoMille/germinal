@@ -29,6 +29,7 @@ def run_filters(
     target_len: int,
     multi_relax: bool = False,
     select_mode: str = "best",
+    af3_seed_size: int = 5,
 ) -> Tuple[dict, dict, bool, str]:
     """Run filters and compute metrics for a single design trajectory.
 
@@ -86,7 +87,7 @@ def run_filters(
         hotspot_residue = target_settings.get("hotspot_residue", None),
         target_len=target_len,
         select_mode=select_mode,
-        af3_seed_size=run_settings.get("num_af3_seed", 5), 
+        af3_seed_size=af3_seed_size,
     )
 
     # ========================== FastRelax ==========================
@@ -98,11 +99,10 @@ def run_filters(
             run_settings["dalphaball_path"],
             n_relax=run_settings.get("n_relax", 5),
         )
-        relax_score_mode = run_settings.get("relax_score_mode", "average")
-        (averaged_interface_scores, best_interface_AA, best_interface_residues,
+        (best_interface_scores, best_interface_AA, best_interface_residues,
          best_relaxed_pdb) = pyrosetta_utils.score_interface_ensemble(
             relaxed_paths, binder_chain, target_chain,
-            score_mode=relax_score_mode
+            score_mode=run_settings.get("relax_score_mode", "average"),
         )
         external_relaxed_pdb = best_relaxed_pdb
 
@@ -110,13 +110,12 @@ def run_filters(
         num_clashes_trajectory = utils.calculate_clash_score(
             external_pdb, threshold=clash_threshold, only_ca=True
         )
-        num_clashes_relaxed = np.mean([
-            utils.calculate_clash_score(p, threshold=clash_threshold, only_ca=True)
-            for p in relaxed_paths
-        ])
+        num_clashes_relaxed = utils.calculate_clash_score(
+            external_relaxed_pdb, threshold=clash_threshold, only_ca=True
+        )
 
         interface_metrics = {
-            "interface_scores": averaged_interface_scores,
+            "interface_scores": best_interface_scores,
             "interface_AA": best_interface_AA,
             "interface_residues": best_interface_residues,
         }

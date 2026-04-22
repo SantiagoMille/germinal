@@ -293,13 +293,15 @@ binder_near_hotspot:
   operator: '=='
 ```
 
-**Multi-relax ensemble (`multi_relax`):** by default Germinal runs a single PyRosetta FastRelax per structure. Setting `multi_relax: true` runs `n_relax` relaxations in parallel and selects the best result by interface score, giving a more stable energy estimate. `relax_score_mode` controls aggregation (`"average"` or `"best"`; default `"average"`):
+**Multi-relax ensemble (`multi_relax`):** by default Germinal runs a single PyRosetta FastRelax per structure during final filters. Setting `multi_relax: true` runs `n_relax` relaxations in parallel with different random seeds. `relax_score_mode` controls how the ensemble result is reported: `"average"` (default) averages numeric metrics across all runs; `"best"` returns metrics from the single lowest-energy run only. In both modes the structure with the lowest `binder_score` (most negative REU) is saved.
 
 ```yaml
 multi_relax: true
 n_relax: 5
-relax_score_mode: "average"
+relax_score_mode: "average"  # or "best"
 ```
+
+> **⚠️ `multi_relax` is under active development.** If you encounter any issues, please [open a GitHub issue](https://github.com/SantiagoMille/germinal/issues).
 
 **AbLang sequence score (`lm_ll`):** the `lm_ll` column in `designs.csv` is the AbLang pseudo-log-likelihood of the final sequence — each residue is masked once and scored against full bidirectional context. Higher values indicate more natural antibody sequences. Uses AbLang1 for VHH and AbLang2 for scFv. Computed automatically for all accepted designs; useful as a post-hoc ranking criterion.
 
@@ -360,7 +362,7 @@ grad_merge_method: "pcgrad"  # how to combine AF2 and AbLang gradients: "pcgrad"
 ```
 
 **Gradient methods:**
-- `"pll"` (default): Salazar-style masked PLL — each position is masked once and scored; most principled but slower. For scFv, forward passes are chunked (default 8 positions/pass) to bound GPU memory.
+- `"pll"` (default): Salazar-style masked PLL — each position is masked once and scored; most principled but slower. Forward passes are chunked (default 8 for scFv, 32 for VHH) to bound GPU memory.
 - `"mlm"`: random-subset MLM — masks ~15% of positions per step; fast and stochastic.
 - `"unmasked"`: single forward pass cross-entropy; fastest but not true PLL.
 
@@ -370,11 +372,7 @@ grad_merge_method: "pcgrad"  # how to combine AF2 and AbLang gradients: "pcgrad"
 - Semigreedy phase: uses `v3`
 - Best-sequence selection criterion: uses `v4` as the LM score weight
 
-**Memory:** if you encounter OOM errors during the PLL gradient step (most likely with scFv / AbLang2 on smaller GPUs), reduce the chunk size:
-```bash
-python run_germinal.py pll_chunk_size=4
-```
-Or set `ablm_method: "mlm"` for a single-pass alternative.
+**Memory:** default chunk sizes are 8 (scFv / AbLang2) and 32 (VHH / AbLang1). If you encounter OOM errors, reduce with `pll_chunk_size=4` or lower, or set `ablm_method: "mlm"` for a single-pass alternative. Recommended: set `export XLA_PYTHON_CLIENT_PREALLOCATE=false` and `export XLA_CLIENT_MEM_FRACTION=0.5`.
 
 > **⚠️ AbLang integration is under active development.** If you encounter any issues, please [open a GitHub issue](https://github.com/SantiagoMille/germinal/issues).
 
@@ -505,8 +503,8 @@ python -u run_germinal.py run=scfv_pdl1 experiment_name=pdl1_scfv filter/initial
 
 <!-- TOC --><a name="troubleshooting"></a>
 ## Troubleshooting
-- We have occassionally observed OOM errors when using AbLang 1-heavy to design VHHs. If you are experiencing this error, try lowering the amount of memory Jax preallocates to 0.5 with `export XLA_CLIENT_MEM_FRACTION=0.5` or ` XLA_CLIENT_MEM_FRACTION=0.5 python run_germinal.py [args]`.
-- OOM errors during the AbLang PLL gradient step (most common with scFv / AbLang2) can be reduced by lowering the chunk size: `python run_germinal.py pll_chunk_size=4`. Alternatively, switch to the single-pass MLM method with `ablm_method=mlm`.
+- We have occasionally observed OOM errors when using AbLang 1-heavy to design VHHs. If you are experiencing this error, set `export XLA_PYTHON_CLIENT_PREALLOCATE=false` and `export XLA_CLIENT_MEM_FRACTION=0.5`.
+- OOM errors during the AbLang PLL gradient step: set `export XLA_PYTHON_CLIENT_PREALLOCATE=false` and `export XLA_CLIENT_MEM_FRACTION=0.5` to limit JAX pre-allocation. Default chunk sizes are 8 (scFv) and 32 (VHH); reduce with `pll_chunk_size=4` if needed. Alternatively, switch to the single-pass MLM method with `ablm_method=mlm`.
 
 <!-- TOC --><a name="bugfix-changelog"></a>
 ## Bugfix Changelog

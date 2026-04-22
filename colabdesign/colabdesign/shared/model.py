@@ -157,12 +157,6 @@ class design_model:
   def _norm_seq_grad(self, effective_length=None, zero_thr=1e-7):
     g = self.aux["grad"]["seq"]
     zero_grad_mask = (np.square(g).sum(-1) < zero_thr)  # shape: (batch, L)
-    for batch_idx, mask in enumerate(zero_grad_mask):
-        zero_positions = np.where(mask)[0]
-        if len(zero_positions) > 0:
-            # print the sum for position 10
-            print(f"Batch {batch_idx}: Positions with zero gradients: {zero_positions}")
-
     eff_L = (np.square(g).sum(-1,keepdims=True) > zero_thr).sum(-2,keepdims=True) if effective_length is None else effective_length
     gn = np.linalg.norm(g,axis=(-1,-2),keepdims=True)
     self.aux["grad"]["seq"] = g * np.sqrt(eff_L) / (gn + 1e-7)

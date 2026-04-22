@@ -207,13 +207,14 @@ class CustomAbLang(nn.Module):
         """Masked PLL gradient (Salazar-style), chunked to bound peak GPU memory.
 
         Processes AA positions in chunks of chunk_size. Each chunk runs a forward
-        pass at batch_size=chunk_size with the masked embeddings. Pred logits are
-        accumulated across chunks; a single backward pass computes the gradient.
+        pass at batch_size=chunk_size with the masked embeddings, then immediately
+        frees its computation graph via per-chunk backward. Peak GPU memory is
+        proportional to one chunk, not the full sequence length.
 
-        Default chunk_size: 8 for scFv (AbLang2, L~242), 16 for VHH (AbLang1, L~130).
+        Default chunk_size: 8 for scFv (AbLang2, L~242), 32 for VHH (AbLang1, L~130).
         """
         if chunk_size is None:
-            chunk_size = 8 if self.is_scfv else 16
+            chunk_size = 8 if self.is_scfv else 32
         embed_layer, token_ids, input_embeddings, aa_positions, x = self._build_inputs(seq_logits)
 
         L = aa_positions.shape[0]
@@ -222,17 +223,23 @@ class CustomAbLang(nn.Module):
 
         batch_token_ids = token_ids.expand(L, -1)  # [L, seq_len] — integer ids, no grad
 
-        all_pred_logits = []
+        # Per-chunk backward: frees each chunk's transformer graph immediately after
+        # loss.backward(), so peak memory is O(1 chunk) instead of O(L/chunk_size chunks).
+        # ie_chunk is a detached leaf each iteration; gradients accumulate into ie_grad.
+        # A single VJP at the end propagates ie_grad through the x → input_embeddings path.
+        ie_grad = torch.zeros_like(input_embeddings)
+        total_loss_val = 0.0
         for start in range(0, L, chunk_size):
             end = min(start + chunk_size, L)
             chunk_aa_pos = aa_positions[start:end]   # [chunk]
             chunk_len    = end - start
 
-            pos_idx       = torch.arange(seq_len, device=self.device)
-            chunk_masked  = pos_idx.unsqueeze(0) == chunk_aa_pos.unsqueeze(1)  # [chunk, seq_len]
-            emb_chunk     = input_embeddings.expand(chunk_len, -1, -1)          # [chunk, seq_len, D]
-            mask_chunk    = mask_emb.view(1, 1, -1).expand(chunk_len, seq_len, -1)
-            chunk_input   = torch.where(chunk_masked.unsqueeze(-1), mask_chunk, emb_chunk)
+            pos_idx      = torch.arange(seq_len, device=self.device)
+            chunk_masked = pos_idx.unsqueeze(0) == chunk_aa_pos.unsqueeze(1)  # [chunk, seq_len]
+            ie_chunk     = input_embeddings.detach().requires_grad_(True)      # fresh leaf, no history
+            emb_chunk    = ie_chunk.expand(chunk_len, -1, -1)
+            mask_chunk   = mask_emb.view(1, 1, -1).expand(chunk_len, seq_len, -1)
+            chunk_input  = torch.where(chunk_masked.unsqueeze(-1), mask_chunk, emb_chunk)
 
             def _make_hook(ci):
                 def _hook(_m, _i, _o):
@@ -246,14 +253,17 @@ class CustomAbLang(nn.Module):
                 hook.remove()
 
             chunk_idx = torch.arange(chunk_len, device=self.device)
-            all_pred_logits.append(chunk_logits[chunk_idx, chunk_aa_pos, :])  # [chunk, vocab]
+            pred      = chunk_logits[chunk_idx, chunk_aa_pos, :]   # [chunk, vocab]
+            labels    = token_ids[0, aa_positions[start:end]]
+            loss      = F.cross_entropy(pred, labels, reduction='sum')
+            total_loss_val += loss.item()
+            loss.backward()          # frees this chunk's transformer activations immediately
+            ie_grad += ie_chunk.grad  # accumulate ∂loss/∂input_embeddings
 
-        pred_logits = torch.cat(all_pred_logits, dim=0)   # [L, vocab]
-        labels      = token_ids[0, aa_positions]           # [L]
-        total_loss  = F.cross_entropy(pred_logits, labels, reduction='sum')
-        mean_nll    = total_loss.item() / L
-        grad = torch.autograd.grad(total_loss, x)[0]
-        return grad.detach(), -mean_nll
+        # Single VJP through x → input_embeddings (lightweight: no transformer involved)
+        (x_grad,) = torch.autograd.grad(input_embeddings, x, grad_outputs=ie_grad)
+        mean_nll = total_loss_val / L
+        return x_grad.detach(), -mean_nll
 
     def get_grad_mlm(self, seq_logits: torch.Tensor,
                      mask_frac: float = 0.15,
@@ -361,7 +371,7 @@ class CustomAbLang(nn.Module):
                             'unmasked' — fast aligned CE (one forward pass, not true PLL)
                             'mlm'      — random-subset MLM, stochastic (one forward pass)
             pll_chunk_size: positions per forward pass for 'pll'; None → auto (8 for scFv,
-                            16 for VHH). Override to tune memory/speed tradeoff.
+                            32 for VHH). Override to tune memory/speed tradeoff.
         """
         if method is None:
             method = self.ablm_method

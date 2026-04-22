@@ -11,6 +11,7 @@ Pacesa, M., Nickel, L., Schellhaas, C. et al. One-shot design of functional prot
 """
 
 import os
+import multiprocessing
 import pyrosetta as pr
 from pyrosetta.rosetta.core.kinematics import MoveMap
 from pyrosetta.rosetta.core.select.residue_selector import ChainSelector
@@ -485,6 +486,138 @@ def unaligned_rmsd(reference_pdb, align_pdb, reference_chain_id, align_chain_id)
     rmsd = rmsd_metric.calculate(align_chain_pose)
 
     return round(rmsd, 2)
+
+
+def _relax_worker(pdb_file, relaxed_pdb_path, seed, dalphaball_path):
+    """Worker function for parallel Rosetta relax. Runs in a child process
+    with its own PyRosetta initialization.
+    """
+    pr.init(
+        f"-ignore_unrecognized_res -ignore_zero_occupancy -mute all "
+        f"-holes:dalphaball {dalphaball_path} "
+        f"-corrections::beta_nov16 true -relax:default_repeats 1 "
+        f"-run:constant_seed -run:jran {seed}"
+    )
+
+    pose = pr.pose_from_pdb(pdb_file)
+    start_pose = pose.clone()
+
+    mmf = MoveMap()
+    mmf.set_chi(True)
+    mmf.set_bb(True)
+    mmf.set_jump(False)
+
+    fastrelax = FastRelax()
+    scorefxn = pr.get_fa_scorefxn()
+    fastrelax.set_scorefxn(scorefxn)
+    fastrelax.set_movemap(mmf)
+    fastrelax.max_iter(200)
+    fastrelax.min_type("lbfgs_armijo_nonmonotone")
+    fastrelax.constrain_relax_to_start_coords(True)
+    fastrelax.apply(pose)
+
+    align = AlignChainMover()
+    align.source_chain(0)
+    align.target_chain(0)
+    align.pose(start_pose)
+    align.apply(pose)
+
+    for resid in range(1, pose.total_residue() + 1):
+        if pose.residue(resid).is_protein():
+            bfactor = start_pose.pdb_info().bfactor(resid, 1)
+            for atom_id in range(1, pose.residue(resid).natoms() + 1):
+                pose.pdb_info().bfactor(resid, atom_id, bfactor)
+
+    pose.dump_pdb(relaxed_pdb_path)
+    clean_pdb(relaxed_pdb_path)
+
+
+def pr_relax_parallel(pdb_file, output_dir, design_name, dalphaball_path, n_relax=5):
+    """Run parallel Rosetta FastRelax with different random seeds.
+
+    Spawns n_relax child processes, each with its own PyRosetta initialization
+    and a unique random seed. Note: each spawn re-initializes PyRosetta (~30-60s
+    overhead per process), so n_relax should be kept small (3-5).
+
+    Returns:
+        list[str]: Paths to relaxed PDB files (only those that succeeded).
+    """
+    ctx = multiprocessing.get_context("spawn")
+    relaxed_paths = []
+    processes = []
+    seeds = np.random.randint(0, 999999, size=n_relax).tolist()
+
+    for i, seed in enumerate(seeds):
+        relaxed_pdb_path = os.path.join(output_dir, f"{design_name}_relaxed_{i}.pdb")
+        relaxed_paths.append(relaxed_pdb_path)
+
+        if os.path.exists(relaxed_pdb_path):
+            continue
+
+        p = ctx.Process(
+            target=_relax_worker,
+            args=(pdb_file, relaxed_pdb_path, seed, dalphaball_path),
+        )
+        processes.append(p)
+
+    for p in processes:
+        p.start()
+    for p in processes:
+        p.join()
+
+    missing = [p for p in relaxed_paths if not os.path.exists(p)]
+    if missing:
+        print(f"Warning: {len(missing)} relax runs failed: {missing}")
+        relaxed_paths = [p for p in relaxed_paths if os.path.exists(p)]
+
+    return relaxed_paths
+
+
+def score_interface_ensemble(
+    relaxed_pdb_paths, binder_chain="B", target_chain="A", score_mode="average"
+):
+    """Score interface metrics across an ensemble of relaxed structures.
+
+    Selects best structure by lowest binder_score (most negative Rosetta energy).
+
+    Args:
+        score_mode: "average" — average numeric metrics across all runs;
+                    "best" — return metrics from the single best structure only.
+
+    Returns:
+        tuple: (interface_scores, best_interface_AA, best_interface_residues, best_relaxed_pdb_path)
+    """
+    all_scores, all_aa, all_residues = [], [], []
+
+    for pdb_path in relaxed_pdb_paths:
+        try:
+            scores, aa, residues = score_interface(pdb_path, binder_chain, target_chain)
+            all_scores.append(scores)
+            all_aa.append(aa)
+            all_residues.append(residues)
+        except Exception as e:
+            print(f"Warning: score_interface failed for {pdb_path}: {e}")
+
+    if not all_scores:
+        raise RuntimeError("All score_interface calls failed in ensemble scoring")
+
+    best_idx = np.argmin([s["binder_score"] for s in all_scores])
+    best_interface_AA = all_aa[best_idx]
+    best_interface_residues = all_residues[best_idx]
+    best_relaxed_pdb_path = relaxed_pdb_paths[best_idx]
+
+    if score_mode == "best":
+        return all_scores[best_idx], best_interface_AA, best_interface_residues, best_relaxed_pdb_path
+
+    result_scores = {}
+    for key in all_scores[0]:
+        values = [s[key] for s in all_scores if s.get(key) is not None]
+        if values and isinstance(values[0], (int, float)):
+            result_scores[key] = np.mean(values)
+        else:
+            result_scores[key] = all_scores[0][key]
+
+    return result_scores, best_interface_AA, best_interface_residues, best_relaxed_pdb_path
 
 
 # Relax designed structure

@@ -365,7 +365,7 @@ def germinal_design(
     # let's check whether the trajectory is worth optimising by checking confidence, clashes, and contacts
     # check clashes
     # clash_interface = calculate_clash_score(model_pdb_path, 2.4)
-    ca_clashes = calculate_clash_score(model_pdb_path, 2.75, only_ca=True)
+    ca_clashes = calculate_clash_score(model_pdb_path, 2.5, only_ca=True)
 
     # if clash_interface > 25 or ca_clashes > 0:
     if ca_clashes > 0:

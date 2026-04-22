@@ -436,8 +436,8 @@ def _calculate_mean_lis(
             start_j, end_j = start_indices[j], cum_lengths[j]
 
             submatrix = transformed_pae[start_i:end_i, start_j:end_j]
-            mean_lis = submatrix[submatrix > 0].mean()
-            mean_lis_matrix[i, j] = mean_lis if not np.isnan(mean_lis) else 0
+            positive = submatrix[submatrix > 0]
+            mean_lis_matrix[i, j] = positive.mean() if positive.size > 0 else 0
 
     return mean_lis_matrix
 

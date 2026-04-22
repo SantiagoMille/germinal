@@ -100,6 +100,10 @@ num_recycles_design: 3
 recycle_mode: "last"
 soft_iterations: 60
 
+multi_relax: false
+n_relax: 5
+relax_score_mode: "average"
+
 # Other loss settings
 use_helix_loss: true
 use_beta_loss: true

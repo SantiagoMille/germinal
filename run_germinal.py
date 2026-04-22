@@ -7,6 +7,7 @@ from omegaconf import DictConfig
 import hydra
 import pyrosetta as pr
 import numpy as np
+import torch
 
 from germinal.design.design import germinal_design
 from germinal.filters import filter_utils, redesign
@@ -126,9 +127,18 @@ def main(cfg: DictConfig):
         trajectory_time = utils.get_clean_time(time.time(), trajectory_start_time)
         print(f"Trajectory took: {trajectory_time}\n")
 
+        # Offload AbLang from GPU before structure prediction — frees PyTorch CUDA memory
+        # for AF3/Protenix. prep_inputs() reloads it at the start of the next trajectory.
+        if hasattr(design_output, 'ablm_model') and design_output.ablm_model is not None:
+            design_output.ablm_model = None
+            torch.cuda.empty_cache()
+
         # ====================================================================================
         # First filter check - cofold and check basic structural filters
         # ====================================================================================
+        select_mode = run_settings.get("af3_structure_select_mode", "best")
+        multi_relax = run_settings.get("multi_relax", False)
+
         print("Running initial cofolding filters")
         filter_metrics, filter_results, pass_initial_filters, final_struct, _ = (
             filter_utils.run_filters(
@@ -139,7 +149,9 @@ def main(cfg: DictConfig):
                 io,
                 trajectory_sequence,
                 trajectory_pdb_af,
-                target_len
+                target_len,
+                select_mode=select_mode,
+                af3_seed_size=3,  # fixed for initial filters — not user-configurable
             )
         )
 
@@ -199,7 +211,10 @@ def main(cfg: DictConfig):
                         io,
                         abmpnn_sequence["seq"],
                         trajectory_pdb_af,
-                        target_len
+                        target_len,
+                        multi_relax=multi_relax,
+                        select_mode=select_mode,
+                        af3_seed_size=run_settings.get("num_af3_seed", 5),
                     )
                 )
                 # save trajectory

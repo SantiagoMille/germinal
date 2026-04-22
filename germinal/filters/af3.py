@@ -400,6 +400,9 @@ def extract_structure_and_scores(output_dir, design_name, binder_chain, select_m
             - ipsae (dict or None): ipSAE, pDockQ2, and LIS scores if available
     """
 
+    # AF3 lowercases the design name in output folder and file names
+    design_name = design_name.lower()
+
     af3_results_folder = os.path.join(output_dir, design_name)
 
     if select_mode == "worst":
