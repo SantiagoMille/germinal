@@ -51,7 +51,7 @@ class _af_prep:
   
 
   def prep_ablang(self, lens, **kwargs):
-    ablang_specific_kwargs = ["ablm_temp", "vh_first", "vh_len", "vl_len", "seed"]
+    ablang_specific_kwargs = ["ablm_temp", "ablm_method", "vh_first", "vh_len", "vl_len", "seed"]
     ablang_kwargs = {k:kwargs.pop(k) for k in ablang_specific_kwargs if k in kwargs}
 
     ablang_kwargs["is_scfv"] = len(lens['cdrs']) > 3

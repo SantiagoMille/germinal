@@ -92,6 +92,7 @@ def germinal_design(
     vl_len = run_settings.get("vl_len", None)
     iglm_species = run_settings.get("iglm_species", "[HUMAN]")
     ablm_model = run_settings.get("ablm_model", "iglm")
+    ablm_method = run_settings.get("ablm_method", "pll")
     dimer = target_settings.get("dimer", False)
     save_filters = {
         "plddt": run_settings.get("plddt_threshold", 0.84),
@@ -160,6 +161,7 @@ def germinal_design(
         optimizer=optimizer,
         ablm_temp=ablm_temp,
         ablm_model=ablm_model,
+        ablm_method=ablm_method,
         iglm_species=iglm_species,
         vl_len=vl_len,
         vh_first=vh_first,
@@ -361,7 +363,7 @@ def germinal_design(
     # let's check whether the trajectory is worth optimising by checking confidence, clashes, and contacts
     # check clashes
     # clash_interface = calculate_clash_score(model_pdb_path, 2.4)
-    ca_clashes = calculate_clash_score(model_pdb_path, 2.5, only_ca=True)
+    ca_clashes = calculate_clash_score(model_pdb_path, 2.75, only_ca=True)
 
     # if clash_interface > 25 or ca_clashes > 0:
     if ca_clashes > 0:
@@ -848,7 +850,7 @@ def log_trajectory(af_model, design_name, io):
         "i_pae",
         "helix",
         "beta_strand",
-        "ablm_ll",
+        "lm_ll",
         "i_plddt",
     ]
 
@@ -895,8 +897,8 @@ def plot_trajectory(af_model, design_name, io):
         Currently focuses on overall loss and AbLM likelihood metrics. Additional
         metrics can be enabled by modifying the metrics_to_plot list.
     """
-    # metrics_to_plot = ['loss', 'plddt', 'ptm', 'i_ptm', 'con', 'i_con', 'pae', 'i_pae', 'helix', 'beta_strand3', 'ablm_ll']
-    metrics_to_plot = ["loss", "ablm_ll"]
+    # metrics_to_plot = ['loss', 'plddt', 'ptm', 'i_ptm', 'con', 'i_con', 'pae', 'i_pae', 'helix', 'beta_strand3', 'lm_ll']
+    metrics_to_plot = ["loss", "lm_ll"]
     colors = ["b", "g", "r", "c", "m", "y", "k"]
 
     for index, metric in enumerate(metrics_to_plot):
@@ -927,10 +929,10 @@ def plot_trajectory(af_model, design_name, io):
                 dpi=150,
             )
             # save loss values if ablm ll
-            if metric == "ablm_ll":
+            if metric == "lm_ll":
                 with open(
                     os.path.join(
-                        io.layout.trajectories, "plots", design_name + "_ablm_ll.txt"
+                        io.layout.trajectories, "plots", design_name + "_lm_ll.txt"
                     ),
                     "w",
                 ) as f:

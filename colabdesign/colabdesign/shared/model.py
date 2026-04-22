@@ -156,8 +156,7 @@ class design_model:
 
   def _norm_seq_grad(self, effective_length=None, zero_thr=1e-7):
     g = self.aux["grad"]["seq"]
-    zero_grad_mask = (np.square(g).sum(-1) == zero_thr)  # shape: (batch, L)
-    squared_grads = np.square(g).sum(-1)
+    zero_grad_mask = (np.square(g).sum(-1) < zero_thr)  # shape: (batch, L)
     for batch_idx, mask in enumerate(zero_grad_mask):
         zero_positions = np.where(mask)[0]
         if len(zero_positions) > 0:

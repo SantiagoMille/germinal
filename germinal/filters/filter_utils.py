@@ -5,8 +5,12 @@ This module contains functions for running filters and computing metrics for a s
 
 import os
 from tempfile import gettempdir
-from typing import Any, Dict, Tuple, Sequence, Set, Union, List
+from typing import Any, Dict, Optional, Tuple, Sequence, Set, Union, List
 import numpy as np
+import torch
+import torch.nn.functional as F
+import ablang2
+from ablang2.models.ablang2.vocab import ablang_vocab
 from iglm import IgLM
 from colabdesign.ablang.model import CustomAbLang
 from germinal.utils import utils
@@ -23,6 +27,8 @@ def run_filters(
     trajectory_sequence: str,
     trajectory_pdb_af: str,
     target_len: int,
+    multi_relax: bool = False,
+    select_mode: str = "best",
 ) -> Tuple[dict, dict, bool, str]:
     """Run filters and compute metrics for a single design trajectory.
 
@@ -61,28 +67,13 @@ def run_filters(
         target_sequence.append(sequences_from_pdb[
             ch
         ])
-    if run_settings["type"].lower() == "nb":
-        cdr3 = (
-            np.array(
-                run_settings["cdr_positions"][sum(run_settings["cdr_lengths"][:-1]) :]
-            )
-            + 1
+    # CDR3 positions (1-indexed): last CDR region
+    cdr3 = (
+        np.array(
+            run_settings["cdr_positions"][sum(run_settings["cdr_lengths"][:-1]) :]
         )
-    elif run_settings["type"].lower() == "scfv":
-        cdr3 = (
-            np.array(
-                run_settings["cdr_positions"][
-                    sum(run_settings["cdr_lengths"][:2]) : sum(
-                        run_settings["cdr_lengths"][:3]
-                    )
-                ]
-            )
-            + 1
-        )
-    else:
-        raise ValueError(
-            f"Type {run_settings['type']} not supported, select either nb or scfv"
-        )
+        + 1
+    )
 
     external_pdb, external_metrics, ipsae = run_structure_prediction(
         trajectory_sequence=trajectory_sequence,
@@ -94,39 +85,72 @@ def run_filters(
         run_settings=run_settings,
         hotspot_residue = target_settings.get("hotspot_residue", None),
         target_len=target_len,
+        select_mode=select_mode,
+        af3_seed_size=run_settings.get("num_af3_seed", 5), 
     )
 
     # ========================== FastRelax ==========================
-    external_relaxed_pdb = os.path.join(
-        structures_directory, trajectory.design_name + "_relaxed.pdb"
-    )
-    pyrosetta_utils.pr_relax(external_pdb, external_relaxed_pdb)
+    if multi_relax:
+        relaxed_paths = pyrosetta_utils.pr_relax_parallel(
+            external_pdb,
+            str(structures_directory),
+            trajectory.design_name,
+            run_settings["dalphaball_path"],
+            n_relax=run_settings.get("n_relax", 5),
+        )
+        relax_score_mode = run_settings.get("relax_score_mode", "average")
+        (averaged_interface_scores, best_interface_AA, best_interface_residues,
+         best_relaxed_pdb) = pyrosetta_utils.score_interface_ensemble(
+            relaxed_paths, binder_chain, target_chain,
+            score_mode=relax_score_mode
+        )
+        external_relaxed_pdb = best_relaxed_pdb
 
-    # ========================== Calculate Clashes ==========================
-    clash_threshold = run_settings["clash_threshold"]
-    num_clashes_trajectory = utils.calculate_clash_score(
-        external_pdb, threshold=clash_threshold
-    )
-    num_clashes_relaxed = utils.calculate_clash_score(
-        external_relaxed_pdb, threshold=clash_threshold
-    )
+        clash_threshold = run_settings["clash_threshold"]
+        num_clashes_trajectory = utils.calculate_clash_score(
+            external_pdb, threshold=clash_threshold, only_ca=True
+        )
+        num_clashes_relaxed = np.mean([
+            utils.calculate_clash_score(p, threshold=clash_threshold, only_ca=True)
+            for p in relaxed_paths
+        ])
+
+        interface_metrics = {
+            "interface_scores": averaged_interface_scores,
+            "interface_AA": best_interface_AA,
+            "interface_residues": best_interface_residues,
+        }
+    else:
+        external_relaxed_pdb = os.path.join(
+            structures_directory, trajectory.design_name + "_relaxed.pdb"
+        )
+        pyrosetta_utils.pr_relax(external_pdb, external_relaxed_pdb)
+
+        # ========================== Calculate Clashes ==========================
+        clash_threshold = run_settings["clash_threshold"]
+        num_clashes_trajectory = utils.calculate_clash_score(
+            external_pdb, threshold=clash_threshold, only_ca=True
+        )
+        num_clashes_relaxed = utils.calculate_clash_score(
+            external_relaxed_pdb, threshold=clash_threshold, only_ca=True
+        )
+
+        # ========================== Calculate Interface Metrics ==========================
+        interface_metric_names = ["interface_scores", "interface_AA", "interface_residues"]
+        interface_metrics = {
+            k: v
+            for k, v in zip(
+                interface_metric_names,
+                pyrosetta_utils.score_interface(
+                    external_relaxed_pdb, binder_chain, target_chain=target_chain
+                ),
+            )
+        }
 
     # ========================== Secondary structure content ==========================
     ss_content = utils.calc_ss_percentage(
         external_pdb, run_settings, binder_chain, return_dict=True, target_chain=target_chain
     )
-
-    # ========================== Calculate Interface Metrics ==========================
-    interface_metric_names = ["interface_scores", "interface_AA", "interface_residues"]
-    interface_metrics = {
-        k: v
-        for k, v in zip(
-            interface_metric_names,
-            pyrosetta_utils.score_interface(
-                external_relaxed_pdb, binder_chain, target_chain=target_chain
-            ),
-        )
-    }
 
     # ========================== Calculate number of framework mutations ==========================
     n_framework_mutations, framework_mutations = get_framework_mutations(
@@ -227,7 +251,7 @@ def run_filters(
 
     # ========================== Get Log-likelihood from AbLM ==========================
     if run_settings["ablm_model"] == "iglm":
-        ablm_ll = get_iglm_ll(
+        lm_ll = get_iglm_ll(
             sequence=trajectory_sequence,
             species_token=run_settings["iglm_species"],
             vh_first=run_settings["vh_first"],
@@ -235,14 +259,14 @@ def run_filters(
             vl_len=run_settings["vl_len"],
         )
     elif run_settings["ablm_model"] == "ablang":
-        ablm_ll = get_ablang_ll(
+        lm_ll = get_ablang_ll(
             sequence=trajectory_sequence,
             vh_first=run_settings["vh_first"],
             vh_len=run_settings["vh_len"],
             vl_len=run_settings["vl_len"],
         )
     else:
-        ablm_ll = -1
+        lm_ll = -1
         print(f"Warning: {run_settings['ablm_model']} not recognized, skipping LL")
 
     # ========================== Aggregate Filter Metrics ==========================
@@ -265,13 +289,13 @@ def run_filters(
         num_clashes_trajectory,
         num_clashes_relaxed,
         binder_near_hotspot,
-        ablm_ll,
+        lm_ll,
     )
 
     # ========================== Evaluate Filter Set ==========================
     accepted, filter_results = evaluate_filters(filter_set, filter_metrics)
 
-    return filter_metrics, filter_results, accepted, external_relaxed_pdb
+    return filter_metrics, filter_results, accepted, external_relaxed_pdb, external_pdb
 
 
 def build_filter_metrics(
@@ -293,7 +317,7 @@ def build_filter_metrics(
     num_clashes_trajectory,
     num_clashes_relaxed,
     binder_near_hotspot,
-    ablm_ll,
+    lm_ll,
 ) -> Dict[str, Any]:
     """
     Aggregate all metrics into comprehensive evaluation dict (floats rounded to 4 decimals).
@@ -357,7 +381,6 @@ def build_filter_metrics(
         "cdr_sap": cdr_sap,
         "cdr3_hotspot_contacts": cdr3_hotspot_contacts,
         "cdr_hotspot_contacts": cdr_hotspot_contacts,
-        "binder_near_hotspot": binder_near_hotspot,
         # derived confidence
         "pdockq2": pdockq_metrics["pDockQ2"],
         "ipsae_pdockq2": None if ipsae is None else ipsae["pdockq2"],
@@ -380,7 +403,7 @@ def build_filter_metrics(
         "interface_residues": interface_metrics["interface_residues"],
         "ss_content": ss_content,
         # ablm log-likelihood (iglm or ablang)
-        "ablm_ll": ablm_ll,
+        "lm_ll": lm_ll,
     }
 
     # round floats to 4 decimals for compactness
@@ -518,7 +541,9 @@ def run_structure_prediction(
     run_settings: dict,
     target_len: int,
     hotspot_residue = None,
-) -> Tuple[str, dict]:
+    select_mode: str = "best",
+    af3_seed_size: int = 5,
+) -> Tuple[str, dict, Optional[dict]]:
     """
     Run AF3 or Chai structure prediction for antibody-target complex.
 
@@ -534,7 +559,7 @@ def run_structure_prediction(
     Returns:
         Tuple[str, dict]: (pdb_path, confidence_metrics)
     """
-    af3_seed = [int(x) for x in np.random.randint(0, 999999, size=3)]
+    af3_seed = [int(x) for x in np.random.randint(0, 999999, size=af3_seed_size)]
     ipsae = None
     if run_settings["structure_model"] == "af3":
         external_pdb, external_metrics, ipsae = af3.run_af3(
@@ -547,7 +572,7 @@ def run_structure_prediction(
             run_settings,
             binder_chain=binder_chain,
             msa_mode=run_settings["msa_mode"],
-            select_mode=run_settings["af3_structure_select_mode"],
+            select_mode=select_mode,
         )
     elif run_settings["structure_model"] == "chai":
 
@@ -577,7 +602,7 @@ def run_structure_prediction(
             run_settings,
             binder_chain=binder_chain,
             msa_mode=run_settings["msa_mode"],
-            select_mode=run_settings.get("af3_structure_select_mode", "best"),
+            select_mode=select_mode,
         )
     else:
         raise ValueError(
@@ -615,11 +640,11 @@ def compute_hotspot_proximity(
     # Default values when no hotspot specification is provided
     binder_near_hotspot, cdr3_hotspot_contacts, cdr_hotspot_contacts = True, 0, 0
     offset = 0
-    binder_near_hotspot = []
     cdr3_hotspot_contacts_ch = 0
     cdr_hotspot_contacts_ch = 0
 
     if len(target_settings["target_hotspots"]) > 0:
+        binder_near_hotspot = []
         target_chains = target_chain.split(",")
         for ch in target_chains:
 
@@ -757,32 +782,26 @@ def get_ablang_ll(
     ablm_temp=0.6,
 ):
     """
-    Calculate antibody sequence log-likelihood using AbLang language model.
-    Uses AbLang1 for VHH (nanobodies) and AbLang2-paired for scFv.
+    Calculate antibody sequence pseudo-log-likelihood using AbLang (MLM scoring).
+
+    Each residue is masked once and scored against the full bidirectional context,
+    giving the true MLM pseudolikelihood. Uses AbLang1 for VHH and AbLang2 for scFv.
 
     Args:
         sequence: Antibody amino acid sequence (full scFv including linker, or VHH)
         vh_first: Heavy chain first in scFv sequence
         vh_len: Heavy chain length (None for nanobodies)
         vl_len: Light chain length (None for nanobodies)
-        ablm_temp: Temperature for softmax (default 0.6)
+        ablm_temp: Unused (kept for API compatibility)
 
     Returns:
-        float: Log-likelihood score (higher = more natural)
+        float: Pseudo-log-likelihood score (higher = more natural)
     """
-    _aa = ['A','R','N','D','C','Q','E','G','H','I','L','K','M','F','P','S','T','W','Y','V']
     is_scfv = bool(vh_len and vl_len)
-    logits = np.zeros((len(sequence), 20), dtype=np.float32)
-    for i, aa in enumerate(sequence):
-        if aa in _aa:
-            logits[i, _aa.index(aa)] = 10.0
-
     model = CustomAbLang(
         is_scfv=is_scfv,
         vh_first=vh_first,
         vh_len=vh_len,
         vl_len=vl_len,
-        ablm_temp=ablm_temp,
     )
-    _, ll = model.get_ablm_grad(logits)
-    return ll
+    return model.compute_pll(sequence)

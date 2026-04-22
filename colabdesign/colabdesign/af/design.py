@@ -32,12 +32,17 @@ def _ensure_2d(x):
     else:
         raise ValueError(f"Expected (L,K) or (1,L,K), got {x.shape}")
 
+_ABLM_NORM_EPS = 1e-4  # calibrated: min observed norm 0.020 (debug_hallucination.py), 50x safety margin
+
 def normalize_ablm_grad(ablm_grad, af2_grad):
-    total_bind_norm = np.linalg.norm(af2_grad[0])
+    assert af2_grad.ndim == 3 and af2_grad.shape[0] == 1, \
+        f"Expected af2_grad shape (1, L, K), got {af2_grad.shape}"
     total_ablm_norm = np.linalg.norm(ablm_grad)
-    scale_factor = total_bind_norm / (total_ablm_norm + 1e-7)
-    normalized_ablm_grad = ablm_grad * scale_factor
-    return normalized_ablm_grad
+    if total_ablm_norm < _ABLM_NORM_EPS:
+        return np.zeros_like(ablm_grad)
+    total_bind_norm = np.linalg.norm(af2_grad[0])
+    scale_factor = total_bind_norm / (total_ablm_norm + 1e-7)  # +1e-7 matches original behaviour
+    return ablm_grad * scale_factor
 
 def mgda(grad_list, epsilon=1e-8):
     """
@@ -335,10 +340,21 @@ class _af_design:
 
     self.aux["log"]["af_grad"] = np.array(self.aux["grad"]["seq"])
     self.aux["log"]["ablm_grad"] = np.zeros(self.aux["grad"]["seq"].shape)
-    self.aux["log"]["ablm_ll"] = ll
+    self.aux["log"]["lm_ll"] = ll
+    self.aux["log"]["_ablm_scale"] = float(self.opt.get("_ablm_scale", 0.0))
 
     normalized_ablm_grad = normalize_ablm_grad(ablm_grad, self.aux["grad"]["seq"])
     scaled_ablm_grad = self.opt['_ablm_scale'] * normalized_ablm_grad
+
+    if verbose >= 2:
+      self.aux["log"]["af_grad_raw"] = np.array(self.aux["grad"]["seq"])
+      self.aux["log"]["ablm_grad_raw"] = np.array(scaled_ablm_grad)
+      af_flat = self.aux["grad"]["seq"].ravel()
+      ab_flat = scaled_ablm_grad.ravel()
+      denom = np.linalg.norm(af_flat) * np.linalg.norm(ab_flat)
+      self.aux["log"]["ablm_af2_cosine_sim"] = float(np.dot(af_flat, ab_flat) / denom) if denom > 0 else 0.0
+      self.aux["log"]["total_ablm_norm"] = float(np.linalg.norm(ablm_grad))
+      self.aux["log"]["total_bind_norm"] = float(np.linalg.norm(self.aux["grad"]["seq"][0]))
 
     if self.opt["grad_merge_method"]['scale']:
       # simple scaling of ablm gradient
@@ -681,16 +697,16 @@ class _af_design:
                                logits=seq_logits + bias)
         aux = self.predict(seq=mut_seq, return_aux=True, model_nums=model_nums, verbose=False, **kwargs)
         np_seq_repr = np.eye(20)[mut_seq[0]].astype(np.float32)
-        _, aux["ablm_ll"] = self.ablm_model.get_ablm_grad(np_seq_repr)
+        _, aux["lm_ll"] = self.ablm_model.get_ablm_grad(np_seq_repr, method='pll')
         buff.append({"aux":aux, "seq":np.array(mut_seq)})
-      
+
       # accept best
-      losses = [x["aux"]["loss"] - self.opt["ablm_scale"][-1] * x["aux"]["ablm_ll"] for x in buff]
+      losses = [x["aux"]["loss"] - self.opt["ablm_scale"][-1] * x["aux"]["lm_ll"] for x in buff]
 
       best = buff[np.argmin(losses)]
       self.aux, seq = best["aux"], jnp.array(best["seq"])
-      _, ll = self.ablm_model.get_ablm_grad(np.eye(20)[best["seq"][0]].astype(np.float32))
-      self.aux["log"]["ablm_ll"] = ll
+      _, ll = self.ablm_model.get_ablm_grad(np.eye(20)[best["seq"][0]].astype(np.float32), method='pll')
+      self.aux["log"]["lm_ll"] = ll
 
       self.set_seq(seq=seq, bias=bias)
       self._save_results(save_best=save_best, verbose=verbose, design_mode='hard', save_filters=save_filters)

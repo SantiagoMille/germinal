@@ -18,12 +18,14 @@ class CustomAbLang(nn.Module):
         vh_len: Optional[int] = None,
         vl_len: Optional[int] = None,
         ablm_temp: float = 1.0,
+        ablm_method: str = 'pll',
         device: Optional[torch.device] = None,
         seed: Optional[int] = 0) -> None:
         """Configure temperature and device; set scFv split attributes externally."""
         super().__init__()
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.tau = ablm_temp
+        self.ablm_method: str = ablm_method
         self.is_scfv: bool = is_scfv
         self.vh_first: bool = vh_first
         self.vh_len: Optional[int] = vh_len
@@ -116,13 +118,17 @@ class CustomAbLang(nn.Module):
         updated_sequence = '<' + sequence[:insert_pos] + '>|<' + sequence[insert_pos:] + '>'
         return updated_embeddings, updated_token_ids, updated_sequence
 
-    def get_grad(self, seq_logits: torch.Tensor) -> Tuple[np.ndarray, float]:
-        """Compute gradient of loss with respect to sequence logits.
-        Since the ablang model(s) are trained to take in the entire sequence, we can use the same logic
-        for both vhh and scfv.
+    def _build_inputs(self, seq_logits: torch.Tensor):
+        """Build token IDs, soft input embeddings, and AA positions from sequence logits.
 
-        seq: dict with key "logits" or array-like of shape (L,20).
-        Returns (gradient, likelihood / -loss).
+        Common setup shared by all three gradient variants (unmasked CE, batched PLL, MLM).
+
+        Returns:
+            embed_layer:      embedding Module used for forward hooks
+            token_ids:        [1, seq_len] hard token IDs (BOS + residues + EOS for VHH)
+            input_embeddings: [1, seq_len, embed_dim] soft differentiable embeddings
+            aa_positions:     [n_aa] indices into token_ids[0] that are amino acid tokens
+            x:                possibly VH/VL-reordered logits (grad flows back to seq_logits)
         """
         model_to_use = self._init_model()
         x = seq_logits
@@ -138,19 +144,17 @@ class CustomAbLang(nn.Module):
 
         if 'ablang1' in model_to_use:
             embed_layer = self._model.AbRep.AbEmbeddings.AAEmbeddings
-            residue_embeddings = oh[:,:-2] @ embed_layer.weight
+            residue_embeddings = oh[:, :-2] @ embed_layer.weight
         else:
             embed_layer = self._model.AbLang.get_aa_embeddings()
             residue_embeddings = oh @ embed_layer.weight
+
         residue_token_ids = hard_idx.detach()
         residue_embeddings, residue_token_ids, s = self._insert_chain_separator(
-            residue_embeddings,
-            residue_token_ids,
-            s,
+            residue_embeddings, residue_token_ids, s,
         )
 
         if 'ablang1' in model_to_use:
-            # AbLang1 (VHH): wrap bare residue sequence with BOS '<' (0) and EOS '>' (22)
             bos_emb = embed_layer.weight[0].unsqueeze(0)
             eos_emb = embed_layer.weight[22].unsqueeze(0)
             input_embeddings = torch.cat(
@@ -162,42 +166,210 @@ class CustomAbLang(nn.Module):
                 [bos_id, residue_token_ids.unsqueeze(0), eos_id], dim=1
             )
         else:
-            # AbLang2 (scFv): BOS/EOS already inserted by _insert_chain_separator
             token_ids = residue_token_ids.unsqueeze(0).to(self.device)
             input_embeddings = residue_embeddings.unsqueeze(0)
 
-        def _embedding_hook(_module, _input, _output):
+        assert token_ids.shape[0] == 1, "expects a single sequence (batch size 1)"
+        aa_ids = torch.tensor(self.ablang_idx_mapping, device=self.device)
+        aa_positions = torch.isin(token_ids[0], aa_ids).nonzero().squeeze(1)  # [n_aa]
+
+        return embed_layer, token_ids, input_embeddings, aa_positions, x
+
+    def get_grad(self, seq_logits: torch.Tensor) -> Tuple[np.ndarray, float]:
+        """Unmasked CE gradient (fast, one forward pass).
+
+        NOTE: NOT Salazar-style masked PLL. The embedding hook supplies the actual
+        (soft) token at every position, so the model sees the token it is predicting.
+        This is a differentiable optimization proxy — use compute_pll() for scoring.
+
+        reduction='sum' keeps gradient magnitude length-independent; normalize_ablm_grad()
+        in design.py rescales to AF2 gradient norm before merging.
+        """
+        embed_layer, token_ids, input_embeddings, aa_positions, x = self._build_inputs(seq_logits)
+
+        def _hook(_m, _i, _o):
             return input_embeddings
 
-        hook_handle = embed_layer.register_forward_hook(_embedding_hook)
+        hook = embed_layer.register_forward_hook(_hook)
         try:
             logits = self._model.AbLang(token_ids)
         finally:
-            hook_handle.remove()
+            hook.remove()
 
-        shift_logits = logits[:, :-1, :]
-        shift_labels = token_ids[:, 1:]
-        loss = F.cross_entropy(
-            shift_logits.reshape(-1, shift_logits.size(-1)),
-            shift_labels.reshape(-1),
-            reduction='none'  # Return loss for each position
+        res_logits = logits[0][aa_positions]     # [n_aa, vocab]
+        res_labels = token_ids[0][aa_positions]  # [n_aa]
+        total_loss = F.cross_entropy(res_logits, res_labels, reduction='sum')
+        mean_nll = total_loss.item() / aa_positions.shape[0]
+        grad = torch.autograd.grad(total_loss, x)[0]
+        return grad.detach(), -mean_nll
+
+    def get_grad_pll(self, seq_logits: torch.Tensor) -> Tuple[np.ndarray, float]:
+        """Batched masked PLL gradient (Salazar-style).
+
+        Runs L masked sequences in a single batched forward pass (batch_size = n_aa).
+        Batch item j has position aa_positions[j] replaced by [MASK]; all other positions
+        use the soft differentiable embeddings. CE is summed over all masked positions.
+
+        Memory: n_aa × seq_len × embed_dim  (~6 GB for L=130 on a 40 GB GPU).
+        """
+        embed_layer, token_ids, input_embeddings, aa_positions, x = self._build_inputs(seq_logits)
+
+        L = aa_positions.shape[0]
+        seq_len = input_embeddings.shape[1]
+        mask_emb = embed_layer.weight[ablang_vocab['*']].detach()  # [embed_dim]
+
+        # pos_is_masked[j, p] = True iff position p is masked in batch item j
+        pos_idx = torch.arange(seq_len, device=self.device)            # [seq_len]
+        pos_is_masked = pos_idx.unsqueeze(0) == aa_positions.unsqueeze(1)  # [L, seq_len]
+
+        emb_expanded  = input_embeddings.expand(L, -1, -1)                  # [L, seq_len, D]
+        mask_expanded = mask_emb.view(1, 1, -1).expand(L, seq_len, -1)     # [L, seq_len, D]
+        batch_input   = torch.where(pos_is_masked.unsqueeze(-1), mask_expanded, emb_expanded)
+
+        batch_token_ids = token_ids.expand(L, -1)  # [L, seq_len]
+
+        def _batch_hook(_m, _i, _o):
+            return batch_input
+
+        hook = embed_layer.register_forward_hook(_batch_hook)
+        try:
+            batch_logits = self._model.AbLang(batch_token_ids)  # [L, seq_len, vocab]
+        finally:
+            hook.remove()
+
+        # Gather prediction at each masked position
+        pred_logits = batch_logits[torch.arange(L, device=self.device), aa_positions, :]  # [L, vocab]
+        labels      = token_ids[0, aa_positions]                                           # [L]
+        total_loss  = F.cross_entropy(pred_logits, labels, reduction='sum')
+        mean_nll    = total_loss.item() / L
+        grad = torch.autograd.grad(total_loss, x)[0]
+        return grad.detach(), -mean_nll
+
+    def get_grad_mlm(self, seq_logits: torch.Tensor,
+                     mask_frac: float = 0.15,
+                     seed: Optional[int] = None) -> Tuple[np.ndarray, float]:
+        """Random-subset MLM gradient (one forward pass, stochastic).
+
+        Masks ~mask_frac of AA positions at random (minimum 1), runs one forward pass,
+        computes CE only at masked positions. Matches AbLang's training objective.
+        Set seed for reproducibility across calls.
+        """
+        embed_layer, token_ids, input_embeddings, aa_positions, x = self._build_inputs(seq_logits)
+
+        L = aa_positions.shape[0]
+        n_mask = max(1, round(mask_frac * L))
+        seq_len = input_embeddings.shape[1]
+        mask_emb = embed_layer.weight[ablang_vocab['*']].detach()  # [embed_dim]
+
+        if seed is not None:
+            saved = torch.get_rng_state()
+            torch.manual_seed(seed)
+        perm = torch.randperm(L, device=self.device)[:n_mask]
+        if seed is not None:
+            torch.set_rng_state(saved)
+
+        mask_pos = aa_positions[perm]  # [n_mask] positions in token_ids to mask
+
+        pos_is_masked = torch.isin(
+            torch.arange(seq_len, device=self.device), mask_pos
+        )  # [seq_len]
+        emb_single    = input_embeddings[0]                           # [seq_len, D]
+        mask_expanded = mask_emb.unsqueeze(0).expand(seq_len, -1)    # [seq_len, D]
+        masked_input  = torch.where(
+            pos_is_masked.unsqueeze(-1), mask_expanded, emb_single
+        ).unsqueeze(0)  # [1, seq_len, D]
+
+        def _hook(_m, _i, _o):
+            return masked_input
+
+        hook = embed_layer.register_forward_hook(_hook)
+        try:
+            logits = self._model.AbLang(token_ids)  # [1, seq_len, vocab]
+        finally:
+            hook.remove()
+
+        pred_logits = logits[0, mask_pos, :]  # [n_mask, vocab]
+        labels      = token_ids[0, mask_pos]  # [n_mask]
+        total_loss  = F.cross_entropy(pred_logits, labels, reduction='sum')
+        mean_nll    = total_loss.item() / n_mask
+        grad = torch.autograd.grad(total_loss, x)[0]
+        return grad.detach(), -mean_nll
+
+    def compute_pll(self, sequence: str) -> float:
+        """
+        Compute MLM pseudolikelihood by masking each residue position once.
+
+        For each residue, mask it and score log p(residue | all other positions).
+        Returns mean log-prob over residue positions (higher = more natural).
+
+        For scFv: sequence should be the full sequence (VH+linker+VL or VH+VL).
+        vh_len and vl_len must be set on the instance.
+        """
+        model_to_use = self._init_model()
+        MASK_ID = ablang_vocab['*']  # 23
+
+        if self.is_scfv:
+            # AbLang2 has a working pseudo_log_likelihood that accepts 'VH|VL' format
+            assert self.vh_len and self.vl_len, "vh_len and vl_len must be set for scFv"
+            if self.vh_first:
+                seq_str = sequence[:self.vh_len] + '|' + sequence[-self.vl_len:]
+            else:
+                seq_str = sequence[:self.vl_len] + '|' + sequence[-self.vh_len:]
+            pll = self._model.pseudo_log_likelihood([seq_str])[0]
+            return float(pll)
+
+        # AbLang1 (VHH): pseudo_log_likelihood is broken (tokenizer API mismatch).
+        # Tokenize manually: AbLang1 expects [BOS, residues, EOS].
+        residue_ids = torch.tensor(
+            [ablang_vocab[aa] for aa in sequence], dtype=torch.long, device=self.device
         )
-        position_losses = loss.reshape(shift_labels.shape)
-        position_losses = position_losses[:, 1:-1]
-        loss = position_losses.mean()
-        ll = -loss.item()
-        grad = torch.autograd.grad(loss, x)[0]
-        return grad.detach(), ll
+        token_ids = torch.cat([
+            torch.tensor([ablang_vocab['<']], device=self.device),
+            residue_ids,
+            torch.tensor([ablang_vocab['>']], device=self.device),
+        ])  # [L+2]
 
-    def get_ablm_grad(self, seq) -> Tuple[np.ndarray, float]:
-        """Alias for get_grad for compatibility with existing pipelines."""
-        current_logits = torch.tensor(seq["logits"][0] if isinstance(seq, dict) else seq, device=self.device, requires_grad=True)
-        grad, ll = self.get_grad(current_logits)
+        per_pos_nll = []
+        with torch.no_grad():
+            for i in range(1, len(residue_ids) + 1):  # skip BOS(0) and EOS(-1)
+                masked = token_ids.clone()
+                masked[i] = MASK_ID
+                out = self._model.AbLang(masked.unsqueeze(0))  # [1, L+2, vocab]
+                nll_i = F.cross_entropy(
+                    out[0, i, :].unsqueeze(0), token_ids[i].unsqueeze(0)
+                ).item()
+                per_pos_nll.append(nll_i)
+
+        return -float(np.mean(per_pos_nll))
+
+    def get_ablm_grad(self, seq, method: str = 'pll') -> Tuple[np.ndarray, float]:
+        """Compute AbLang gradient for the hallucination loop.
+
+        Args:
+            seq:    logits dict (with key 'logits') or raw array, shape (..., seq_len, 20)
+            method: 'pll'      — Salazar-style batched masked PLL (all positions in one batch,
+                                 equivalent to one forward pass at batch_size=L; default)
+                    'unmasked' — fast aligned CE (one forward pass, not true PLL)
+                    'mlm'      — random-subset MLM, stochastic (one forward pass)
+        """
+        if method is None:
+            method = self.ablm_method
+
+        current_logits = torch.tensor(
+            seq["logits"][0] if isinstance(seq, dict) else seq,
+            device=self.device, requires_grad=True,
+        )
+
+        if method == 'pll':
+            grad, ll = self.get_grad_pll(current_logits)
+        elif method == 'mlm':
+            grad, ll = self.get_grad_mlm(current_logits)
+        else:
+            grad, ll = self.get_grad(current_logits)
 
         if self.is_scfv:
             grad_h = grad[:self.vh_len, :]
             grad_l = grad[-self.vl_len:, :]
-
             logits_shape = current_logits.shape[0] - self.vh_len - self.vl_len
             zeros = torch.zeros((logits_shape, 20), device=self.device)
             if self.vh_first:

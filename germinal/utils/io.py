@@ -46,7 +46,7 @@ TRAJECTORY_METRICS_TO_SAVE = [
     "i_pae",
     "pae",
     "loss",
-    "ablm_ll",
+    "lm_ll",
     "helix",
     "beta_strand",
 ]
@@ -585,3 +585,182 @@ class IO:
                 updated_all_trajectories_df.to_csv(self.layout.all_csv, index=False)
 
         return 0
+
+
+# ---------------------------------------------------------------------------
+# Simplified layout and IO for the logits-only pipeline
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class LogitsRunLayout:
+    """Simplified directory structure for the logits-only design pipeline.
+
+    Directory Structure:
+        root/
+        ├── trajectories/            # hallucination PDBs (flat)
+        ├── redesign_candidates/     # Protenix PDBs + per-design JSONs
+        ├── all_trajectories.csv
+        ├── failure_counts.csv
+        └── final_config.yaml
+    """
+
+    root: Path
+    trajectories: Path
+    redesign_candidates: Path
+    all_csv: Path
+    failure_csv: Path
+    final_config: Path
+
+    @classmethod
+    def create(cls, root: Path | str):
+        if isinstance(root, str):
+            root = Path(root)
+
+        root.mkdir(parents=True, exist_ok=True)
+
+        traj = root / "trajectories"
+        redesign = root / "redesign_candidates"
+        all_csv = root / "all_trajectories.csv"
+        failure_csv = root / "failure_counts.csv"
+        final_config = root / "final_config.yaml"
+
+        traj.mkdir(parents=True, exist_ok=True)
+        redesign.mkdir(parents=True, exist_ok=True)
+        all_csv.touch()
+        failure_csv.touch()
+        final_config.touch()
+
+        return cls(
+            root=root,
+            trajectories=traj,
+            redesign_candidates=redesign,
+            all_csv=all_csv,
+            failure_csv=failure_csv,
+            final_config=final_config,
+        )
+
+
+class LogitsIO:
+    """Simplified IO handler for the logits-only design pipeline.
+
+    Mirrors the thread-safe behaviour of :class:`IO` but targets the
+    flat :class:`LogitsRunLayout` directory structure (no ``accepted/``
+    folder, no per-directory ``designs.csv``, no ``plots/``).
+    """
+
+    def __init__(self, layout: LogitsRunLayout):
+        self.layout = layout
+
+    # -- config persistence ---------------------------------------------------
+
+    def save_run_config(
+        self, run_settings: Dict[str, Any], target_settings: Dict[str, Any]
+    ):
+        with open(self.layout.final_config, "w") as f:
+            yaml.dump(
+                {"run_settings": run_settings, "target_settings": target_settings}, f
+            )
+        print(f"Run and target settings saved to {self.layout.final_config}")
+
+    # -- seed / termination checks -------------------------------------------
+
+    def check_existing_seed(self, seed: int) -> bool:
+        for directory in (self.layout.trajectories, self.layout.redesign_candidates):
+            if not directory.exists():
+                continue
+            for fname in os.listdir(directory):
+                if str(seed) in fname:
+                    return True
+        return False
+
+    def check_termination_conditions(
+        self, run_settings: Dict[str, Any], n_trajectories: int
+    ):
+        csv_path = self.layout.all_csv
+        if not csv_path.exists() or csv_path.stat().st_size == 0:
+            n_completed = 0
+        else:
+            n_completed = len(pd.read_csv(csv_path))
+        if n_completed >= run_settings.get("max_hallucinated_trajectories", 10**6):
+            return True, "Max hallucinated trajectories reached. Exiting."
+        if n_trajectories >= run_settings["max_trajectories"]:
+            return True, "Max trajectories reached. Exiting."
+        return False, ""
+
+    # -- failure tracking ----------------------------------------------------
+
+    def update_failures(self, fail_column) -> None:
+        if self.layout.failure_csv is None:
+            return
+
+        lock = FileLock(f"{str(self.layout.failure_csv)}.lock")
+        with lock:
+            try:
+                failure_df = pd.read_csv(self.layout.failure_csv)
+            except Exception:
+                failure_df = pd.DataFrame()
+
+            if isinstance(fail_column, dict):
+                updates = dict(fail_column)
+            else:
+                updates = {fail_column: 1}
+
+            if failure_df.empty or len(failure_df) == 0:
+                failure_df = pd.DataFrame([updates])
+            else:
+                for col, count in updates.items():
+                    if col in failure_df.columns:
+                        failure_df.loc[:, col] = (
+                            failure_df[col].fillna(0).astype(int) + count
+                        )
+                    else:
+                        failure_df[col] = count
+
+            failure_df.to_csv(self.layout.failure_csv, index=False)
+
+    # -- file helpers --------------------------------------------------------
+
+    def save_halluc_pdb(self, src_path: str, design_name: str) -> str:
+        """Copy a hallucinated PDB into ``trajectories/``."""
+        dst = self.layout.trajectories / f"{design_name}.pdb"
+        shutil.copy(src_path, dst)
+        return str(dst)
+
+    def save_redesign_pdb(self, src_path: str, name: str) -> str:
+        """Copy a Protenix-refolded PDB into ``redesign_candidates/``."""
+        dst = self.layout.redesign_candidates / f"{name}.pdb"
+        shutil.copy(src_path, dst)
+        return str(dst)
+
+    def save_design_json(self, design_dict: dict, design_name: str) -> str:
+        """Write the per-design result dictionary as JSON."""
+        import json
+        dst = self.layout.redesign_candidates / f"{design_name}.json"
+        with open(dst, "w") as f:
+            json.dump(design_dict, f, indent=2, default=str)
+        return str(dst)
+
+    def append_to_all_csv(self, row_dict: Dict[str, Any]) -> None:
+        """Thread-safe append of a single row to ``all_trajectories.csv``."""
+        lock = FileLock(f"{str(self.layout.all_csv)}.lock")
+        row_df = pd.DataFrame([row_dict])
+        with lock:
+            first = (
+                not self.layout.all_csv.exists()
+                or self.layout.all_csv.stat().st_size == 0
+            )
+            if first:
+                row_df.to_csv(self.layout.all_csv, mode="w", header=True, index=False)
+            else:
+                existing = pd.read_csv(self.layout.all_csv)
+                common = [c for c in row_df.columns if c in existing.columns]
+                if common:
+                    merged = pd.concat(
+                        [existing[common], row_df[common]], ignore_index=True
+                    )
+                else:
+                    merged = pd.concat(
+                        [existing, row_df], ignore_index=True, sort=False
+                    )
+                merged.to_csv(self.layout.all_csv, index=False)
