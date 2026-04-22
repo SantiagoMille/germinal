@@ -9,7 +9,7 @@ Germinal is a pipeline for designing de novo antibodies against specified epitop
 
 We describe Germinal in the preprint: ["Efficient generation of epitope-targeted de novo antibodies with Germinal"](https://www.biorxiv.org/content/10.1101/2025.09.19.677421v1)
 
-**⚠️ We are still actively working on code improvements [See our recommendations/tips](#tips-for-design)**. 
+**⚠️ We are still actively working on code improvements [See our recommendations/tips](#tips-for-design)**. The Protenix and AbLang integrations are under active development — if you run into any issues please [open a GitHub issue](https://github.com/SantiagoMille/germinal/issues).
 
 ## Contents
 
@@ -332,6 +332,8 @@ Optional speed tuning parameters (can also be set via CLI): `protenix_use_msa` (
 
 > **Known limitation**: When Protenix does not produce full PAE matrix output, interface metrics (`i_pae`, `i_plddt`) are unavailable and any filters on those metrics will be automatically passed. A warning is printed when this occurs.
 
+> **⚠️ Protenix support is under active development.** If you encounter any issues, please [open a GitHub issue](https://github.com/SantiagoMille/germinal/issues).
+
 <!-- TOC --><a name="ablang"></a>
 ### AbLang Configuration
 
@@ -363,6 +365,8 @@ grad_merge_method: "pcgrad"  # how to combine AF2 and AbLang gradients: "pcgrad"
 python run_germinal.py pll_chunk_size=4
 ```
 Or set `ablm_method: "mlm"` for a single-pass alternative.
+
+> **⚠️ AbLang integration is under active development.** If you encounter any issues, please [open a GitHub issue](https://github.com/SantiagoMille/germinal/issues).
 
 <!-- TOC --><a name="score-selection"></a>
 ### Structure Score Selection Mode
