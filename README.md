@@ -28,6 +28,7 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
    * [Filters Configuration](#filters-configuration)
    * [AF3 Configuration](#af3)
    * [Protenix Configuration](#protenix)
+   * [AbLang Configuration](#ablang)
    * [Structure Score Selection Mode](#score-selection)
 - [Output Format](#output-format)
 - [Tips for Design](#tips-for-design)
@@ -331,6 +332,38 @@ Optional speed tuning parameters (can also be set via CLI): `protenix_use_msa` (
 
 > **Known limitation**: When Protenix does not produce full PAE matrix output, interface metrics (`i_pae`, `i_plddt`) are unavailable and any filters on those metrics will be automatically passed. A warning is printed when this occurs.
 
+<!-- TOC --><a name="ablang"></a>
+### AbLang Configuration
+
+Germinal uses an antibody language model (AbLang by default) to bias hallucination towards sequences with high naturalness. The language model gradient is mixed with the structural gradient at each step using the method specified by `grad_merge_method` (default: `"pcgrad"`).
+
+Key config parameters:
+
+```yaml
+ablm_model: "ablang"    # "ablang" (default) or "iglm"
+ablm_method: "pll"      # gradient method: "pll" (default), "mlm", or "unmasked"
+ablm_scale: [0.1, 0.4, 0.4, 1.0]  # ramp schedule (see below)
+ablm_temp: 0.6          # softmax temperature for sequence sampling
+grad_merge_method: "pcgrad"  # how to combine AF2 and AbLang gradients: "pcgrad", "scale", or "mgda"
+```
+
+**Gradient methods:**
+- `"pll"` (default): Salazar-style masked PLL — each position is masked once and scored; most principled but slower. For scFv, forward passes are chunked (default 8 positions/pass) to bound GPU memory.
+- `"mlm"`: random-subset MLM — masks ~15% of positions per step; fast and stochastic.
+- `"unmasked"`: single forward pass cross-entropy; fastest but not true PLL.
+
+**`ablm_scale` ramp:** controls language model influence at each design phase. Defined as `[v1, v2, v3, v4]`:
+- Logits phase: ramps linearly from `v1` → `v2`
+- Softmax phase: holds at `v3`
+- Semigreedy phase: uses `v3`
+- Best-sequence selection criterion: uses `v4` as the LM score weight
+
+**Memory:** if you encounter OOM errors during the PLL gradient step (most likely with scFv / AbLang2 on smaller GPUs), reduce the chunk size:
+```bash
+python run_germinal.py pll_chunk_size=4
+```
+Or set `ablm_method: "mlm"` for a single-pass alternative.
+
 <!-- TOC --><a name="score-selection"></a>
 ### Structure Score Selection Mode
 
@@ -421,7 +454,7 @@ weights_beta: 0.1
 framework_contact_offset: 1
 ```
 
-`ablm_scale` is a key parameter that controls the influence of IgLM during different stages of the design process. `ablm_scale` is defined as a list of four scalar values: `[v_1,v_2,v_3,v_4]`. During the logits phase, ablm_scale increases linearly between v_1 and v_2. During the softmax phase, ablm_scale takes the value of v_3, and during the semi-greedy stage ablm_scale takes the value of v_4. 
+`ablm_scale` is a key parameter that controls the influence of the antibody language model (AbLang/IgLM) during different stages of the design process. See the [AbLang Configuration](#ablang) section for a full description of the ramp schedule and gradient methods.
 
 Filters are also easily changeable in the filters configurations. To add or remove filters from the initial and final filtering rounds, simply create a new filter with the same name as the intended metric and specify the threshold value and the operator (<, >, =, etc).
 
@@ -459,6 +492,7 @@ python -u run_germinal.py run=scfv_pdl1 experiment_name=pdl1_scfv filter/initial
 <!-- TOC --><a name="troubleshooting"></a>
 ## Troubleshooting
 - We have occassionally observed OOM errors when using AbLang 1-heavy to design VHHs. If you are experiencing this error, try lowering the amount of memory Jax preallocates to 0.5 with `export XLA_CLIENT_MEM_FRACTION=0.5` or ` XLA_CLIENT_MEM_FRACTION=0.5 python run_germinal.py [args]`.
+- OOM errors during the AbLang PLL gradient step (most common with scFv / AbLang2) can be reduced by lowering the chunk size: `python run_germinal.py pll_chunk_size=4`. Alternatively, switch to the single-pass MLM method with `ablm_method=mlm`.
 
 <!-- TOC --><a name="bugfix-changelog"></a>
 ## Bugfix Changelog
@@ -468,6 +502,7 @@ python -u run_germinal.py run=scfv_pdl1 experiment_name=pdl1_scfv filter/initial
 - 9/26/25: Resolved an error which caused passing runs to crash at the final stage due to a misnamed variable ([commit 9292e1e](https://github.com/SantiagoMille/germinal/commit/9292e1e), [issue #11](https://github.com/SantiagoMille/germinal/issues/11))
 - 9/28/25: Resolved an error in throwing exception for AF3 calls + added containerization support ([commit e4ca63a](https://github.com/SantiagoMille/germinal/commit/e4ca63a), [raised in pr #12](https://github.com/SantiagoMille/germinal/pull/12))
 - 10/1/25: Resolved a bug where trajectory sequence and structure path information was not updated after AbMPNN redesign. True sequence / structures can still be found in the pdb files in the `structures/` folders ([commit b45136c](https://github.com/SantiagoMille/germinal/commit/b45136c))
+- 4/21/26: AbLang gradient refactor — chunked PLL to bound GPU memory for scFv, `ablm_method` config now correctly applied during hallucination, `run_germinal.py` unpack crash at filter stage fixed ([pr #68](https://github.com/SantiagoMille/germinal/pull/68))
 
 <!-- TOC --><a name="citation"></a>
 ## Citation
