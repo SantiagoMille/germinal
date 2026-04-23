@@ -105,9 +105,12 @@ def run_chai(
     # Generate unique identifier to avoid conflicts with concurrent runs
     hash_id = generate_unique_hash()
 
-    # Create unique temporary directory (must not exist to avoid conflicts)
+    # Create unique temporary directory. exist_ok=True: hash collisions are
+    # possible on a shared scheduler and killing a trajectory for that is
+    # harsher than the (unlikely) file-write race. Per-run files written
+    # below are disjoint-per-design and overwritten idempotently.
     tmp_dir = chai_tmp_base / hash_id
-    tmp_dir.mkdir(exist_ok=False)
+    tmp_dir.mkdir(exist_ok=True)
     fasta_path = tmp_dir / "example.fasta"
 
     # Extract protein sequences from input PDB file
@@ -122,9 +125,10 @@ def run_chai(
         fh.write(">protein|name=binder_protein\n")
         fh.write(binder_sequence + "\n")
 
-    # Create empty output directory (required by Chai-1 inference)
+    # Create empty output directory (required by Chai-1 inference).
+    # exist_ok=True for the same reason as tmp_dir above.
     output_dir = tmp_dir / "outputs"
-    output_dir.mkdir(exist_ok=False)
+    output_dir.mkdir(exist_ok=True)
 
     constraint = False
     if cdr3_idx is not None and hotspot_residue is not None:
