@@ -599,11 +599,14 @@ def run_structure_prediction(
         # Use h3_positions computed by run_filters (PR #67 3-way branch
         # correctly handles nb / VH-first scFv / VL-first scFv). The old
         # hardcoded slice mis-sliced VL-first scFv runs (landed on H1/H2).
+        # cdr3_idx passed to chai must be 1-indexed (PDB residue numbers,
+        # matching the chai.restraints template format like "L13", "D108").
+        # h3_positions is 0-indexed, hence the +1.
         if h3_positions is not None:
-            cdr3_idx = h3_positions[len(h3_positions)//2]
+            cdr3_idx = h3_positions[len(h3_positions)//2] + 1
         else:
             cdr3_idx = run_settings["cdr_positions"][run_settings["cdr_lengths"][0] + run_settings["cdr_lengths"][1]:]
-            cdr3_idx = cdr3_idx[len(cdr3_idx)//2]
+            cdr3_idx = cdr3_idx[len(cdr3_idx)//2] + 1
 
         external_pdb, external_metrics = chai.run_chai(
             trajectory_sequence,
