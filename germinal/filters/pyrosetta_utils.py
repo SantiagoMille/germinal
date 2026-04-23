@@ -491,45 +491,62 @@ def unaligned_rmsd(reference_pdb, align_pdb, reference_chain_id, align_chain_id)
 def _relax_worker(pdb_file, relaxed_pdb_path, seed, dalphaball_path):
     """Worker function for parallel Rosetta relax. Runs in a child process
     with its own PyRosetta initialization.
+
+    On exception, writes a full traceback to ``{relaxed_pdb_path}.err`` so the
+    parent (``pr_relax_parallel``) can read and print it. Without this, child
+    failures only surface as a missing output file with no diagnostics.
     """
-    pr.init(
-        f"-ignore_unrecognized_res -ignore_zero_occupancy -mute all "
-        f"-holes:dalphaball {dalphaball_path} "
-        f"-corrections::beta_nov16 true -relax:default_repeats 1 "
-        f"-run:constant_seed -run:jran {seed}"
-    )
+    import traceback
+    try:
+        pr.init(
+            f"-ignore_unrecognized_res -ignore_zero_occupancy -mute all "
+            f"-holes:dalphaball {dalphaball_path} "
+            f"-corrections::beta_nov16 true -relax:default_repeats 1 "
+            f"-run:constant_seed -run:jran {seed}"
+        )
 
-    pose = pr.pose_from_pdb(pdb_file)
-    start_pose = pose.clone()
+        pose = pr.pose_from_pdb(pdb_file)
+        start_pose = pose.clone()
 
-    mmf = MoveMap()
-    mmf.set_chi(True)
-    mmf.set_bb(True)
-    mmf.set_jump(False)
+        mmf = MoveMap()
+        mmf.set_chi(True)
+        mmf.set_bb(True)
+        mmf.set_jump(False)
 
-    fastrelax = FastRelax()
-    scorefxn = pr.get_fa_scorefxn()
-    fastrelax.set_scorefxn(scorefxn)
-    fastrelax.set_movemap(mmf)
-    fastrelax.max_iter(200)
-    fastrelax.min_type("lbfgs_armijo_nonmonotone")
-    fastrelax.constrain_relax_to_start_coords(True)
-    fastrelax.apply(pose)
+        fastrelax = FastRelax()
+        scorefxn = pr.get_fa_scorefxn()
+        fastrelax.set_scorefxn(scorefxn)
+        fastrelax.set_movemap(mmf)
+        fastrelax.max_iter(200)
+        fastrelax.min_type("lbfgs_armijo_nonmonotone")
+        fastrelax.constrain_relax_to_start_coords(True)
+        fastrelax.apply(pose)
 
-    align = AlignChainMover()
-    align.source_chain(0)
-    align.target_chain(0)
-    align.pose(start_pose)
-    align.apply(pose)
+        align = AlignChainMover()
+        align.source_chain(0)
+        align.target_chain(0)
+        align.pose(start_pose)
+        align.apply(pose)
 
-    for resid in range(1, pose.total_residue() + 1):
-        if pose.residue(resid).is_protein():
-            bfactor = start_pose.pdb_info().bfactor(resid, 1)
-            for atom_id in range(1, pose.residue(resid).natoms() + 1):
-                pose.pdb_info().bfactor(resid, atom_id, bfactor)
+        for resid in range(1, pose.total_residue() + 1):
+            if pose.residue(resid).is_protein():
+                bfactor = start_pose.pdb_info().bfactor(resid, 1)
+                for atom_id in range(1, pose.residue(resid).natoms() + 1):
+                    pose.pdb_info().bfactor(resid, atom_id, bfactor)
 
-    pose.dump_pdb(relaxed_pdb_path)
-    clean_pdb(relaxed_pdb_path)
+        pose.dump_pdb(relaxed_pdb_path)
+        clean_pdb(relaxed_pdb_path)
+    except Exception:
+        err_path = f"{relaxed_pdb_path}.err"
+        try:
+            with open(err_path, "w") as fh:
+                fh.write(
+                    f"_relax_worker failed for pdb_file={pdb_file} seed={seed}\n\n"
+                )
+                fh.write(traceback.format_exc())
+        except Exception:
+            pass
+        raise
 
 
 def pr_relax_parallel(pdb_file, output_dir, design_name, dalphaball_path, n_relax=5):
@@ -567,7 +584,28 @@ def pr_relax_parallel(pdb_file, output_dir, design_name, dalphaball_path, n_rela
 
     missing = [p for p in relaxed_paths if not os.path.exists(p)]
     if missing:
-        print(f"Warning: {len(missing)} relax runs failed: {missing}")
+        print(
+            f"\n{'=' * 78}\n"
+            f"[RELAX ERROR] {len(missing)}/{len(relaxed_paths)} parallel relax runs FAILED\n"
+            f"{'=' * 78}",
+            flush=True,
+        )
+        for p in missing:
+            err_path = f"{p}.err"
+            print(f"\n--- FAILED: {p} ---", flush=True)
+            if os.path.exists(err_path):
+                try:
+                    with open(err_path) as fh:
+                        print(fh.read(), flush=True)
+                except Exception as exc:
+                    print(f"(could not read {err_path}: {exc})", flush=True)
+            else:
+                print(
+                    f"(no traceback file at {err_path} — child likely died "
+                    f"before reaching the except block)",
+                    flush=True,
+                )
+        print(f"{'=' * 78}\n", flush=True)
         relaxed_paths = [p for p in relaxed_paths if os.path.exists(p)]
 
     return relaxed_paths
