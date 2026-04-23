@@ -233,16 +233,19 @@ def idx_from_ranges(ranges, chain="B", offset=0):
         list: Zero-based indices corresponding to the specified ranges
     """
     rows = []
+    if not ranges:
+        return rows
     ranges = ranges.replace(chain, "")
     for part in ranges.split(","):
+        if not part:
+            continue
         if part[0].isalpha():
             continue
+        if "-" in part:
+            start, end = map(int, part.split("-"))
+            rows.extend(range(start + offset - 1, end + offset))
         else:
-            if "-" in part:
-                start, end = map(int, part.split("-"))
-                rows.extend(range(start + offset - 1, end + offset))
-            else:
-                rows.append(int(part) + offset - 1)
+            rows.append(int(part) + offset - 1)
     return rows
 
 
