@@ -82,6 +82,10 @@ def abmpnn_worker(
     """
     Worker function for AbMPNN sequence generation in multiprocessing.
 
+    On exception, dumps the full traceback to ``{output_path}.err`` so the
+    parent can read it and raise a loud error. Without this, child failures
+    only surface as a missing/empty pickle with no diagnostics.
+
     Args:
         trajectory_pdb: Path to the trajectory PDB file
         target_chain: Target chain identifier
@@ -90,15 +94,28 @@ def abmpnn_worker(
         run_settings: Dictionary containing AbMPNN settings
         output_path: Path to save the output pickle file
     """
-    result = abmpnn_design(
-        trajectory_pdb,
-        trajectory_interface_residues,
-        run_settings,
-        target_chain = target_chain,
-        binder_chain = binder_chain,
-    )
-    with open(output_path, "wb") as f:
-        pickle.dump(result, f)
+    import traceback
+    try:
+        result = abmpnn_design(
+            trajectory_pdb,
+            trajectory_interface_residues,
+            run_settings,
+            target_chain = target_chain,
+            binder_chain = binder_chain,
+        )
+        with open(output_path, "wb") as f:
+            pickle.dump(result, f)
+    except Exception:
+        err_path = f"{output_path}.err"
+        try:
+            with open(err_path, "w") as fh:
+                fh.write(
+                    f"abmpnn_worker failed for trajectory_pdb={trajectory_pdb}\n\n"
+                )
+                fh.write(traceback.format_exc())
+        except Exception:
+            pass
+        raise
 
 
 def get_abmpnn_sequences(
@@ -174,16 +191,46 @@ def get_abmpnn_sequences(
     proc.start()
     proc.join()
 
+    # If the child crashed, surface its traceback loudly and raise so the
+    # caller stops the trajectory. Silently returning [] previously hid
+    # AbMPNN bugs as "no sequences generated".
+    if proc.exitcode != 0:
+        err_path = f"{output_path}.err"
+        traceback_text = ""
+        if os.path.exists(err_path):
+            try:
+                with open(err_path) as fh:
+                    traceback_text = fh.read()
+                os.unlink(err_path)
+            except Exception:
+                pass
+        if os.path.exists(output_path):
+            os.unlink(output_path)
+        msg = (
+            f"\n{'=' * 78}\n"
+            f"[ABMPNN ERROR] worker process exited non-zero "
+            f"(exitcode={proc.exitcode}) for trajectory_pdb={trajectory_pdb_af}\n"
+            f"{'=' * 78}\n"
+            f"{traceback_text or '(no traceback captured — child may have died via signal)'}"
+            f"{'=' * 78}\n"
+        )
+        print(msg, flush=True)
+        raise RuntimeError(
+            f"abmpnn_worker failed (exitcode={proc.exitcode}); see traceback above."
+        )
+
     # Read result from file
     try:
         with open(output_path, "rb") as f:
             abmpnn_trajectories = pickle.load(f)
-        os.unlink(output_path)  # Clean up temporary file
+        os.unlink(output_path)
     except Exception as e:
-        print(f"Error reading AbMPNN results: {e}")
         if os.path.exists(output_path):
             os.unlink(output_path)
-        return []
+        raise RuntimeError(
+            f"abmpnn_worker exited 0 but produced unreadable pickle at "
+            f"{output_path}: {e}"
+        )
 
     # Process and deduplicate MPNN sequences
     if not abmpnn_trajectories or "seq" not in abmpnn_trajectories:
