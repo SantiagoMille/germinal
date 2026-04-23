@@ -302,6 +302,7 @@ def generate_msas(
     binder_chain: str,
     msa_mode: str,
     use_metagenomic_db: bool = False,
+    cache_binder_msa: bool = False,
 ) -> dict:
     """
     Generate Multiple Sequence Alignments (MSAs) for protein chains.
@@ -313,6 +314,15 @@ def generate_msas(
     - "colabfold": Use ColabFold remote API
     - "target": Generate MSA only for target protein
 
+    When ``cache_binder_msa`` is True, the first binder MSA generated for a run
+    is cached to ``msas/binder_cached.a3m`` and reused for subsequent designs by
+    rewriting only the query line (line 1), as long as the new binder sequence
+    has the same length as the cached query. This works because
+    ``generate_local_msa`` / colabfold search strip lowercase insertions, so
+    cached rows have uniform length == query length; swapping line 1 keeps
+    position k in every row aligned to position k of the query. Length mismatch
+    falls through to full regeneration.
+
     Args:
         input_json_data (dict): AF3 input JSON containing sequence information.
         msa_db_dir (str): Path to local MSA databases (for local mode).
@@ -320,6 +330,8 @@ def generate_msas(
         binder_chain (str): Chain identifier for the binder protein.
         msa_mode (str): MSA generation method.
         use_metagenomic_db (bool): Include metagenomic databases in search.
+        cache_binder_msa (bool): Enable binder MSA caching with query-line
+            rewrite. Default False.
 
     Returns:
         dict: Updated input JSON with MSA paths added to each sequence.
@@ -340,10 +352,31 @@ def generate_msas(
                 continue
         else:
             design_name = input_json_data["name"]
-            # Skip binder MSA generation when mode is target-only
+            # Cache-hit branch: reuse cached binder MSA by swapping only the query
+            # line. Rows have uniform length == query length (insertions stripped
+            # by generate_local_msa / colabfold), so line-1 swap keeps the
+            # homolog alignment valid. Length mismatch falls through to regen.
+            if cache_binder_msa:
+                cache_path = os.path.join(output_dir, "msas", "binder_cached.a3m")
+                if os.path.exists(cache_path):
+                    with open(cache_path) as _f:
+                        cached_lines = _f.readlines()
+                    cached_query = cached_lines[1].strip() if len(cached_lines) >= 2 else ""
+                    if len(cached_query) == len(sequence):
+                        new_lines = list(cached_lines)
+                        new_lines[0] = f">{design_name}\n"
+                        new_lines[1] = f"{sequence.upper()}\n"
+                        relative_msa_path = os.path.join("msas", f"{design_name}_binder.a3m")
+                        full_msa_path = os.path.join(output_dir, relative_msa_path)
+                        os.makedirs(os.path.dirname(full_msa_path), exist_ok=True)
+                        with open(full_msa_path, "w") as _f:
+                            _f.writelines(new_lines)
+                        sequence_info["protein"]["unpairedMsaPath"] = relative_msa_path
+                        updated_sequences.append(sequence_info)
+                        continue
+            # Skip binder MSA generation when mode is target-only (unless caching)
             if msa_mode == "target":
                 updated_sequences.append(sequence_info)
-                # print(f"Skipping MSA generation for {design_name} because msa_mode is target")
                 continue
 
         # Generate MSA using the specified method
@@ -361,6 +394,15 @@ def generate_msas(
             )
         else:
             print(f"MSA mode {msa_mode} not recognized. Skipping MSA generation.")
+
+        # Seed the binder MSA cache on first generation. Subsequent designs with
+        # a same-length binder will reuse this alignment via the cache-hit
+        # branch above instead of regenerating from scratch.
+        if cache_binder_msa and chain == binder_chain and relative_msa_path:
+            cache_path = os.path.join(output_dir, "msas", "binder_cached.a3m")
+            if not os.path.exists(cache_path):
+                os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+                shutil.copy(os.path.join(output_dir, relative_msa_path), cache_path)
 
         sequence_info["protein"]["unpairedMsaPath"] = relative_msa_path
 
@@ -539,6 +581,7 @@ def _run_af3(
             binder_chain,
             msa_mode,
             use_metagenomic_db=run_settings["use_metagenomic_db"],
+            cache_binder_msa=run_settings.get("cache_binder_msa", False),
         )
 
     # Write updated JSON for AF3
