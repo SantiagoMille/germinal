@@ -11,6 +11,8 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
 
 **⚠️ We are still actively working on code improvements [See our recommendations/tips](#tips-for-design)**. The Protenix and AbLang integrations are under active development — if you run into any issues please [open a GitHub issue](https://github.com/SantiagoMille/germinal/issues).
 
+> **Last user-validated commit:** [`2c0a13b`](https://github.com/SantiagoMille/germinal/commit/2c0a13b76833b6463cb59c571cfeadf17fd710c1) (PR #61 "Fix tokenizer for IgLM"). Commits after this point have been runtime- and review-validated separately on branch `fix/post-pr67-review`.
+
 ## Contents
 
 <!-- TOC -->
