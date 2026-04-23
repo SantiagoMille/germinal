@@ -599,6 +599,9 @@ def run_structure_prediction(
             hotspot_residue = hotspot_residue,
             binder_chain=binder_chain,
             target_len=target_len,
+            num_trunk_recycles=run_settings.get("chai_num_trunk_recycles", 3),
+            num_diffn_timesteps=run_settings.get("chai_num_diffn_timesteps", 200),
+            use_esm_embeddings=run_settings.get("chai_use_esm_embeddings", True),
         )
     elif run_settings["structure_model"] == "protenix":
         external_pdb, external_metrics, ipsae = protenix.run_protenix(
