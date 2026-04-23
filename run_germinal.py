@@ -180,8 +180,6 @@ def main(cfg: DictConfig):
         print("\nStarting AbMPNN redesign...\n")
         abmpnn_sequences, abmpnn_success = redesign.run_abmpnn_redesign_pipeline(
             trajectory_pdb_af=trajectory_pdb_af,
-            target_chain=target_settings["target_chain"],
-            binder_chain=target_settings["binder_chain"],
             run_settings=run_settings,
             atom_distance_cutoff=run_settings["atom_distance_cutoff"],
         )

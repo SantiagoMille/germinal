@@ -217,18 +217,19 @@ def get_abmpnn_sequences(
 
 def run_abmpnn_redesign_pipeline(
     trajectory_pdb_af: str,
-    target_chain: str,
-    binder_chain: str,
     run_settings: Dict[str, Any],
     atom_distance_cutoff: float = 3.0,
 ) -> Tuple[List[Dict[str, Any]], bool]:
     """
     Complete AbMPNN redesign pipeline for a trajectory.
 
+    Note: target_chain / binder_chain are NOT parameters here — they were
+    historically accepted but never forwarded to get_abmpnn_sequences (which
+    uses its own defaults of A/B). Removed from the signature to avoid the
+    misleading impression that the wrapper honors them.
+
     Args:
         trajectory_pdb_af: Path to the trajectory PDB file from AF2/ColabDesign
-        target_chain: Target chain identifier (e.g., 'A')
-        binder_chain: Binder chain identifier (e.g., 'B')
         run_settings: Dictionary containing run settings
         atom_distance_cutoff: Distance cutoff for interface residue detection
 
