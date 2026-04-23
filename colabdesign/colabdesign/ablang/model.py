@@ -265,56 +265,6 @@ class CustomAbLang(nn.Module):
         mean_nll = total_loss_val / L
         return x_grad.detach(), -mean_nll
 
-    def get_grad_mlm(self, seq_logits: torch.Tensor,
-                     mask_frac: float = 0.15,
-                     seed: Optional[int] = None) -> Tuple[np.ndarray, float]:
-        """Random-subset MLM gradient (one forward pass, stochastic).
-
-        Masks ~mask_frac of AA positions at random (minimum 1), runs one forward pass,
-        computes CE only at masked positions. Matches AbLang's training objective.
-        Set seed for reproducibility across calls.
-        """
-        embed_layer, token_ids, input_embeddings, aa_positions, x = self._build_inputs(seq_logits)
-
-        L = aa_positions.shape[0]
-        n_mask = max(1, round(mask_frac * L))
-        seq_len = input_embeddings.shape[1]
-        mask_emb = embed_layer.weight[ablang_vocab['*']].detach()  # [embed_dim]
-
-        if seed is not None:
-            saved = torch.get_rng_state()
-            torch.manual_seed(seed)
-        perm = torch.randperm(L, device=self.device)[:n_mask]
-        if seed is not None:
-            torch.set_rng_state(saved)
-
-        mask_pos = aa_positions[perm]  # [n_mask] positions in token_ids to mask
-
-        pos_is_masked = torch.isin(
-            torch.arange(seq_len, device=self.device), mask_pos
-        )  # [seq_len]
-        emb_single    = input_embeddings[0]                           # [seq_len, D]
-        mask_expanded = mask_emb.unsqueeze(0).expand(seq_len, -1)    # [seq_len, D]
-        masked_input  = torch.where(
-            pos_is_masked.unsqueeze(-1), mask_expanded, emb_single
-        ).unsqueeze(0)  # [1, seq_len, D]
-
-        def _hook(_m, _i, _o):
-            return masked_input
-
-        hook = embed_layer.register_forward_hook(_hook)
-        try:
-            logits = self._model.AbLang(token_ids)  # [1, seq_len, vocab]
-        finally:
-            hook.remove()
-
-        pred_logits = logits[0, mask_pos, :]  # [n_mask, vocab]
-        labels      = token_ids[0, mask_pos]  # [n_mask]
-        total_loss  = F.cross_entropy(pred_logits, labels, reduction='sum')
-        mean_nll    = total_loss.item() / n_mask
-        grad = torch.autograd.grad(total_loss, x)[0]
-        return grad.detach(), -mean_nll
-
     def compute_pll(self, sequence: str) -> float:
         """
         Compute MLM pseudolikelihood by masking each residue position once.
@@ -369,7 +319,6 @@ class CustomAbLang(nn.Module):
             seq:            logits dict (with key 'logits') or raw array, shape (..., seq_len, 20)
             method:         'pll'      — Salazar-style masked PLL, chunked (default)
                             'unmasked' — fast aligned CE (one forward pass, not true PLL)
-                            'mlm'      — random-subset MLM, stochastic (one forward pass)
             pll_chunk_size: positions per forward pass for 'pll'; None → auto (8 for scFv,
                             32 for VHH). Override to tune memory/speed tradeoff.
         """
@@ -384,7 +333,12 @@ class CustomAbLang(nn.Module):
         if method == 'pll':
             grad, ll = self.get_grad_pll(current_logits, chunk_size=pll_chunk_size)
         elif method == 'mlm':
-            grad, ll = self.get_grad_mlm(current_logits)
+            raise ValueError(
+                "method='mlm' (get_grad_mlm) was removed: it had a CUDA RNG "
+                "state leak (torch.manual_seed seeds CPU; randperm uses CUDA "
+                "generator on GPU). Use method='pll' (default, chunked PLL) "
+                "or method='unmasked' instead."
+            )
         else:
             grad, ll = self.get_grad(current_logits)
 
