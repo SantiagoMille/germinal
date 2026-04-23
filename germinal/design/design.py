@@ -113,6 +113,19 @@ def germinal_design(
         # Clear GPU memory before first compilation
 
         clear_mem()
+        # Validate grad_merge_method; fall back to pcgrad on unknown values
+        # so the ablm gradient is never silently dropped (a typo'd config
+        # would otherwise produce zero ablm contribution with no warning).
+        _valid_grad_merge = {"scale", "pcgrad", "mgda"}
+        if grad_merge_method not in _valid_grad_merge:
+            print(
+                f"\n\n[CONFIG WARNING] grad_merge_method={grad_merge_method!r} "
+                f"not recognized (expected one of {sorted(_valid_grad_merge)}). "
+                f"Defaulting to 'pcgrad' so the AbLang/IgLM gradient is not "
+                f"silently dropped.\n\n",
+                flush=True,
+            )
+            grad_merge_method = "pcgrad"
         print(f"Using gradient merging method: {grad_merge_method}")
         germinal_design._af_model = mk_afdesign_model(
             protocol="binder",
