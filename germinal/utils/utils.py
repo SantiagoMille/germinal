@@ -934,17 +934,17 @@ def calculate_percentages(total, helix, sheet):
     return helix_percentage, sheet_percentage, loop_percentage
 
 
-def interface_cdrs(interface: str, cdrs: str, cdr3: str, binder_chain="B"):
+def interface_cdrs(interface: str, cdrs: list, cdr3: list, binder_chain="B"):
     """Calculate CDR involvement in binding interface.
-    
+
     Analyzes the overlap between interface residues and CDR regions to
     determine what fraction of the interface is composed of CDR residues.
-    
+
     Args:
         interface (str): Interface residue specification string
-        cdrs (str): All CDR residue positions
-        cdr3 (str): CDR3 residue positions specifically
-        
+        cdrs (list): All CDR residue positions (zero-indexed)
+        cdr3 (list): CDR3 residue positions (zero-indexed)
+
     Returns:
         tuple: (total_cdr_fraction, cdr3_fraction) where:
             - total_cdr_fraction: Fraction of interface residues that are CDRs
