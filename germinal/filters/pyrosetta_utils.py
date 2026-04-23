@@ -599,6 +599,12 @@ def pr_relax_parallel(pdb_file, output_dir, design_name, dalphaball_path, n_rela
                         print(fh.read(), flush=True)
                 except Exception as exc:
                     print(f"(could not read {err_path}: {exc})", flush=True)
+                # Clean up: traceback already in this log; no need to keep
+                # the .err file across runs (they accumulate otherwise).
+                try:
+                    os.remove(err_path)
+                except OSError:
+                    pass
             else:
                 print(
                     f"(no traceback file at {err_path} — child likely died "
