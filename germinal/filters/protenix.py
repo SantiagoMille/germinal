@@ -290,6 +290,7 @@ def extract_protenix_scores(
     # PAE matrix from full data if available
     pae_matrix = np.array([[0.0]])
     token_asym_id = np.array([0])
+    full_data = {}
     if best_full_data_path and os.path.exists(best_full_data_path):
         with open(best_full_data_path, "r") as f:
             full_data = json.load(f)
