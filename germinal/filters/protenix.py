@@ -26,15 +26,14 @@ from Bio import PDB
 def _unwrap(val):
     """Unwrap Protenix's single-element list serialization.
 
-    Protenix's ``save_json`` converts tensors via ``.tolist()``.  A shape-[1]
-    tensor becomes ``[value]`` and shape-[1, N] becomes ``[[v0, v1, ...]]``.
-    This helper normalises both cases so downstream code receives plain
-    scalars or 1-D lists, matching what the AF3 pipeline expects.
+    Protenix's ``save_json`` converts tensors via ``.tolist()``. A shape-[1]
+    tensor becomes ``[value]``, shape-[1, N] becomes ``[[v0, v1, ...]]``, and
+    shape-[1, 1] becomes ``[[value]]``. This helper recursively unwraps all
+    single-element list wrapping so downstream code receives a plain scalar
+    or a 1-D list, matching what the AF3 pipeline expects.
     """
-    if isinstance(val, list) and len(val) == 1 and isinstance(val[0], list):
-        return val[0]          # [[v0, v1, ...]] → [v0, v1, ...]
-    if isinstance(val, list) and len(val) == 1:
-        return val[0]          # [value] → value
+    while isinstance(val, list) and len(val) == 1:
+        val = val[0]
     return val
 
 
