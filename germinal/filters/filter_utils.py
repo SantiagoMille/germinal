@@ -276,8 +276,18 @@ def run_filters(
             vl_len=run_settings["vl_len"],
         )
     else:
-        lm_ll = -1
-        print(f"Warning: {run_settings['ablm_model']} not recognized, skipping LL")
+        # Sentinel value chosen to be far outside the realistic lm_ll range
+        # (~-2 to 0) so it visibly fails any reasonable threshold filter and
+        # is unmistakable in CSV output. Using None would trigger fail-loud
+        # for every design — too aggressive for a config typo. Using -1 was
+        # too easy to confuse with a legitimately-bad lm_ll value.
+        lm_ll = -100
+        print(
+            f"\n\n[CONFIG ERROR] ablm_model={run_settings['ablm_model']!r} "
+            f"not recognized (expected 'iglm' or 'ablang'). Setting lm_ll=-100 "
+            f"as a sentinel; any lm_ll filter will reject this design.\n\n",
+            flush=True,
+        )
 
     # ========================== Aggregate Filter Metrics ==========================
     filter_metrics = build_filter_metrics(
