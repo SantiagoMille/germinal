@@ -230,7 +230,11 @@ def run_filters(
         "aggregate_score": external_metrics["aggregate_score"][0],
         "i_pae": i_pae,
         "i_plddt": i_plddt,
-        "binder_pae": external_metrics["binder_pae"].item(),
+        "binder_pae": (
+            external_metrics["binder_pae"].item()
+            if external_metrics["binder_pae"] is not None
+            else None
+        ),
         "ipsae":ipsae
     }
 

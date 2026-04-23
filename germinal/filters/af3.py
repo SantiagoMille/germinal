@@ -507,16 +507,17 @@ def extract_structure_and_scores(output_dir, design_name, binder_chain, select_m
     # the within-binder PAE (binder internal confidence), not the interface.
     # Average both off-diagonal blocks (binder-rows × target-cols and
     # target-rows × binder-cols) to get a symmetric interface score.
+    # Keep np.float64 (not Python float) so downstream `.item()` works.
     binder_mask = np.array(full_metrics['token_chain_ids']) == binder_chain
     if binder_mask.any() and (~binder_mask).any():
-        af3_scores["binder_pae"] = float(np.mean(
+        af3_scores["binder_pae"] = np.mean(
             np.concatenate([
                 pae_matrix[np.ix_(binder_mask, ~binder_mask)].ravel(),
                 pae_matrix[np.ix_(~binder_mask, binder_mask)].ravel(),
             ])
-        ))
+        )
     else:
-        af3_scores["binder_pae"] = float(np.mean(pae_matrix))
+        af3_scores["binder_pae"] = np.mean(pae_matrix)
     #ptm
     af3_scores["ptm"] = [summary_metrics["ptm"]]
     af3_scores["iptm"] = [summary_metrics["iptm"]]

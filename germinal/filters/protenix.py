@@ -356,6 +356,7 @@ def extract_protenix_scores(
     # symmetric interface score. Also validate binder_mask is non-empty: if
     # token_asym_id ordering ever diverges from input, mask becomes empty and
     # we'd silently report 0.0 (which would silently pass < threshold filters).
+    # Keep np.float64 (not Python float) so downstream `.item()` works.
     if pae_matrix.size > 1 and token_asym_id.size > 1:
         binder_mask = token_asym_id == binder_chain_idx
         if not binder_mask.any():
@@ -368,15 +369,15 @@ def extract_protenix_scores(
             )
             scores["binder_pae"] = None
         elif (~binder_mask).any():
-            scores["binder_pae"] = float(np.mean(
+            scores["binder_pae"] = np.mean(
                 np.concatenate([
                     pae_matrix[np.ix_(binder_mask, ~binder_mask)].ravel(),
                     pae_matrix[np.ix_(~binder_mask, binder_mask)].ravel(),
                 ])
-            ))
+            )
         else:
             # Single-chain edge case (no target tokens) — fall back to global mean
-            scores["binder_pae"] = float(np.mean(pae_matrix))
+            scores["binder_pae"] = np.mean(pae_matrix)
     else:
         scores["binder_pae"] = None
 
