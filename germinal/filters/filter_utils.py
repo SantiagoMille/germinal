@@ -206,14 +206,21 @@ def run_filters(
             external_pdb=external_pdb,
             external_metrics=external_metrics,
             binder_chain=binder_chain,
+            ipsae=ipsae,
         )
         i_pae = pDockQ2_out["ifpae_norm"].mean()
         i_plddt = pDockQ2_out["ifplddt"].mean() / 100
     else:
         # PAE matrix not available (e.g. Protenix without full_data output).
-        # Use ipsae values if available, otherwise defaults.
-        pdockq_metrics = {"pDockQ2": ipsae["pdockq2"] if ipsae else 0.0}
-        lis_metrics = {"lis": ipsae.get("LIS", 0.0) if ipsae else 0.0, "lia": 0.0}
+        # Use ipsae values if available, otherwise None (fail-closed via
+        # the new evaluate_filters None handling).
+        pdockq_metrics = {
+            "pDockQ2": ipsae["pdockq2"] if ipsae is not None else None,
+        }
+        lis_metrics = {
+            "lis": ipsae.get("LIS") if ipsae is not None else None,
+            "lia": None,
+        }
         pDockQ2_out = None
         i_pae = None
         i_plddt = None
@@ -734,33 +741,46 @@ def compute_pdockq_and_lis(
     external_pdb: str,
     external_metrics: dict,
     binder_chain: str,
+    ipsae: Optional[dict] = None,
 ) -> Tuple[dict, dict, dict]:
     """
-    Compute docking quality metrics: pDockQ, pDockQ2, LIS, LIA (0-1 scale, higher=better).
+    Compute docking quality metrics.
+
+    pDockQ2 and LIS now come exclusively from the upstream ``ipsae`` tool
+    (single scalar each), avoiding the chain-keying bug in the old
+    pDockQ.pDockQ2 per-chain aggregation that produced wrong values for
+    ≥3-chain complexes. The pDockQ2 module is still called once to obtain
+    the per-residue ``ifpae_norm`` / ``ifplddt`` arrays which feed the
+    interface-PAE and interface-pLDDT metrics (i_pae / i_plddt) — these
+    arrays are not affected by the chain-key bug.
+
+    LIA is no longer computed (ipsae does not produce it); set to None
+    so any filter on lis_lia will fail-loud rather than silently pass.
 
     Args:
         external_pdb: Complex PDB path
         external_metrics: Metrics with PAE matrix
+        binder_chain: Binder chain id (kept for signature compatibility;
+            no longer used in selection now that ipsae provides the scalar)
+        ipsae: ipsae output dict with keys {ipsae, pdockq2, LIS}; None if
+            the ipsae tool failed or full_data was unavailable.
 
     Returns:
         Tuple[dict, dict, dict]: (pdockq_metrics, lis_metrics, pDockQ2_out)
     """
     external_pae = external_metrics["pae_matrix"]
-    pDockQ2_out, chain_specific_pdockq2 = pDockQ.pDockQ2(external_pdb, external_pae)
-    pDockQ2 = []
+    # pDockQ2_out (DataFrame) is still needed for ifpae_norm / ifplddt;
+    # discard the buggy chain_specific_pdockq2 dict entirely.
+    pDockQ2_out, _ = pDockQ.pDockQ2(external_pdb, external_pae)
 
-    for i in chain_specific_pdockq2.keys():
-        if binder_chain in i:
-            pDockQ2.append(chain_specific_pdockq2[i][-1])
-
+    # Use ipsae's pDockQ2 scalar directly. None when ipsae unavailable so
+    # downstream filter evaluation fails-loud rather than silently passes.
     pdockq_metrics = {
-        "pDockQ2": np.mean(pDockQ2),
+        "pDockQ2": ipsae["pdockq2"] if ipsae is not None else None,
     }
-
-    raw_lis_metrics = pDockQ.calculate_lis(external_pdb, external_pae)
     lis_metrics = {
-        "lis": np.mean([raw_lis_metrics["LIS"][0, 1], raw_lis_metrics["LIS"][1, 0]]),
-        "lia": np.mean([raw_lis_metrics["LIA"][0, 1], raw_lis_metrics["LIA"][1, 0]]),
+        "lis": ipsae.get("LIS") if ipsae is not None else None,
+        "lia": None,  # ipsae does not compute LIA; no longer derived locally
     }
 
     return pdockq_metrics, lis_metrics, pDockQ2_out
