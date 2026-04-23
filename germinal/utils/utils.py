@@ -954,6 +954,12 @@ def interface_cdrs(interface: str, cdrs: list, cdr3: list, binder_chain="B"):
     # cdrs = idx_from_ranges(cdrs)
     # cdr3 = idx_from_ranges(cdr3)
 
+    # Empty interface (no contacts detected) — return zeros instead of
+    # raising ZeroDivisionError, which would kill the trajectory after
+    # structure prediction completed and waste the upstream compute.
+    if len(interface) == 0:
+        return 0.0, 0.0
+
     common_elements = []
     common_elems_cdr3 = []
     for element in interface:
