@@ -691,6 +691,19 @@ def run_af3(
             - scores_dict (dict): Confidence metrics including pLDDT, PAE, pTM, iPTM
             - ipsae (dict or None): ipSAE, pDockQ2, and LIS scores if available
     """
+    # Gate: cache_binder_msa relies on a real binder MSA being generated first
+    # (the first binder seeds the cache via shutil.copy, subsequent ones rewrite
+    # only the query line). With msa_mode="target" no binder MSA is ever
+    # generated, so the cache cannot seed and the flag silently does nothing.
+    # Local mode would work in theory but is untested. Require colabfold.
+    if run_settings.get("cache_binder_msa", False) and msa_mode != "colabfold":
+        raise ValueError(
+            f"cache_binder_msa=True requires msa_mode='colabfold'; got "
+            f"msa_mode={msa_mode!r}. In any other mode the binder MSA is "
+            f"either skipped (target) or untested (local/none), so the cache "
+            f"cannot seed and the flag silently does nothing. Set "
+            f"cache_binder_msa=false or switch msa_mode to 'colabfold'."
+        )
 
     input_json_data = create_input_dict(
         binder_seq, target_seq, binder_chain, target_chains, design_name, seed
