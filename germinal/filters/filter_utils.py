@@ -449,11 +449,20 @@ def evaluate_filters(
         operator = filter_config["operator"]
 
         if metric_value is None:
-            # Known limitation: i_pae and i_plddt are None when the structure predictor
-            # does not return a full PAE matrix (e.g. Protenix without full_data output).
-            # Filters on these metrics are skipped rather than failing the design.
-            print(f"\n\nWarning: Metric '{filter_name}' is None, passing filter {filter_name}!!\n\n")
-            passed = True
+            # Fail-closed: a None metric means the structure predictor did not
+            # produce the data needed to evaluate this filter (e.g. Protenix
+            # without full_data → i_pae/i_plddt are None). Silently passing
+            # would let designs through that were never actually checked.
+            # Loudly fail the filter instead.
+            print(
+                f"\n\n[FILTER ERROR] Metric '{filter_name}' is None — cannot "
+                f"evaluate filter ({operator} {threshold}). FAILING this filter "
+                f"(was previously silently passed). To restore old behavior, "
+                f"either remove '{filter_name}' from the filter set or fix the "
+                f"upstream data source so the metric is populated.\n\n",
+                flush=True,
+            )
+            passed = False
         elif operator == "<":
             passed = metric_value < threshold
         elif operator == "<=":
