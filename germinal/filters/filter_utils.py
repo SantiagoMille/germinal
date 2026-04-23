@@ -68,13 +68,23 @@ def run_filters(
         target_sequence.append(sequences_from_pdb[
             ch
         ])
-    # CDR3 positions (1-indexed): last CDR region
-    cdr3 = (
-        np.array(
-            run_settings["cdr_positions"][sum(run_settings["cdr_lengths"][:-1]) :]
+    # H-CDR3 positions (1-indexed). For VL-first scFv the third CDR slot is L3;
+    # H3 sits in the second set of CDRs. For nb and VH-first scFv the flat
+    # `cdr_lengths[:-1]` suffix lands on H3.
+    if run_settings["type"].lower() == "nb":
+        h3_positions = run_settings["cdr_positions"][sum(run_settings["cdr_lengths"][:-1]) :]
+    elif run_settings["type"].lower() == "scfv":
+        if run_settings.get("vh_first", True):
+            h3_positions = run_settings["cdr_positions"][
+                sum(run_settings["cdr_lengths"][:2]) : sum(run_settings["cdr_lengths"][:3])
+            ]
+        else:
+            h3_positions = run_settings["cdr_positions"][sum(run_settings["cdr_lengths"][:-1]) :]
+    else:
+        raise ValueError(
+            f"Type {run_settings['type']} not supported, select either nb or scfv"
         )
-        + 1
-    )
+    cdr3 = np.array(h3_positions) + 1
 
     external_pdb, external_metrics, ipsae = run_structure_prediction(
         trajectory_sequence=trajectory_sequence,
@@ -180,7 +190,7 @@ def run_filters(
     percent_interface_is_cdr = utils.interface_cdrs(
         interface_metrics["interface_residues"],
         run_settings["cdr_positions"],
-        run_settings["cdr_positions"][sum(run_settings["cdr_lengths"][:-1]) :],
+        h3_positions,
         binder_chain=binder_chain,
     )
 
