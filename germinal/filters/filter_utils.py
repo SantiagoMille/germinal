@@ -98,6 +98,7 @@ def run_filters(
         target_len=target_len,
         select_mode=select_mode,
         af3_seed_size=af3_seed_size,
+        h3_positions=h3_positions,
     )
 
     # ========================== FastRelax ==========================
@@ -552,6 +553,7 @@ def run_structure_prediction(
     hotspot_residue = None,
     select_mode: str = "best",
     af3_seed_size: int = 5,
+    h3_positions = None,
 ) -> Tuple[str, dict, Optional[dict]]:
     """
     Run AF3 or Chai structure prediction for antibody-target complex.
@@ -585,8 +587,14 @@ def run_structure_prediction(
         )
     elif run_settings["structure_model"] == "chai":
 
-        cdr3_idx = run_settings["cdr_positions"][run_settings["cdr_lengths"][0] + run_settings["cdr_lengths"][1]:]
-        cdr3_idx = cdr3_idx[len(cdr3_idx)//2]
+        # Use h3_positions computed by run_filters (PR #67 3-way branch
+        # correctly handles nb / VH-first scFv / VL-first scFv). The old
+        # hardcoded slice mis-sliced VL-first scFv runs (landed on H1/H2).
+        if h3_positions is not None:
+            cdr3_idx = h3_positions[len(h3_positions)//2]
+        else:
+            cdr3_idx = run_settings["cdr_positions"][run_settings["cdr_lengths"][0] + run_settings["cdr_lengths"][1]:]
+            cdr3_idx = cdr3_idx[len(cdr3_idx)//2]
 
         external_pdb, external_metrics = chai.run_chai(
             trajectory_sequence,
