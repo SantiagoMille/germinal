@@ -336,7 +336,10 @@ class _af_design:
              models=models, backprop=backprop, callback=callback)
     
     effective_length = None
-    ablm_grad, ll = self.ablm_model.get_ablm_grad(self.aux["seq"], method=self.ablm_model.ablm_method)
+    # CustomIgLM does not set `ablm_method` (only CustomAbLang does); fall back
+    # to None so get_ablm_grad uses the model's own default.
+    ablm_method = getattr(self.ablm_model, "ablm_method", None)
+    ablm_grad, ll = self.ablm_model.get_ablm_grad(self.aux["seq"], method=ablm_method)
 
     self.aux["log"]["af_grad"] = np.array(self.aux["grad"]["seq"])
     self.aux["log"]["ablm_grad"] = np.zeros(self.aux["grad"]["seq"].shape)
