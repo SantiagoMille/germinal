@@ -120,12 +120,17 @@ def run_chai(
     constraint = False
     if cdr3_idx is not None and hotspot_residue is not None:
         constraint = True
-        constraint_path = Path(__file__).with_name("chai.restraints")
-        rests_df = pd.read_csv(constraint_path)
+        # Read the master restraints template, populate per-run values, and
+        # write to a fresh copy inside tmp_dir. Never mutate the tracked
+        # source file — concurrent runs would otherwise race on it and
+        # corrupt a committed file.
+        master_restraints = Path(__file__).with_name("chai.restraints")
+        rests_df = pd.read_csv(master_restraints)
         rest_residue = binder_sequence[cdr3_idx]
         rests_df.loc[0, 'chainB'] = binder_chain
         rests_df.loc[0, 'res_idxB'] = f'{rest_residue}{cdr3_idx}'
         rests_df.loc[0, 'res_idxA'] = hotspot_residue
+        constraint_path = tmp_dir / "chai.restraints"
         rests_df.to_csv(constraint_path, index=False)
 
     # Run Chai-1 structure prediction with optimized parameters
