@@ -349,16 +349,36 @@ def extract_protenix_scores(
     scores["pae_matrix"] = pae_matrix
     scores["pae"] = np.mean(pae_matrix) if pae_matrix.size > 1 else np.float64(0.0)
 
-    # Binder PAE (PAE within binder chain)
+    # binder_pae: average PAE across the binder<->target interface (off-diagonal
+    # blocks). Earlier code used pae[binder, binder] which is the within-binder
+    # PAE (binder internal confidence), not the interface.
+    # Average both off-diagonal blocks (binder×target and target×binder) for a
+    # symmetric interface score. Also validate binder_mask is non-empty: if
+    # token_asym_id ordering ever diverges from input, mask becomes empty and
+    # we'd silently report 0.0 (which would silently pass < threshold filters).
     if pae_matrix.size > 1 and token_asym_id.size > 1:
         binder_mask = token_asym_id == binder_chain_idx
-        if binder_mask.any():
-            binder_pae = pae_matrix[np.ix_(binder_mask, binder_mask)]
-            scores["binder_pae"] = np.mean(binder_pae)
+        if not binder_mask.any():
+            print(
+                f"[WARNING] Protenix binder_mask empty: binder_chain_idx="
+                f"{binder_chain_idx} not found in token_asym_id "
+                f"(unique ids: {np.unique(token_asym_id).tolist()}). "
+                f"binder_pae will be set to None (fail-closed in filters).",
+                flush=True,
+            )
+            scores["binder_pae"] = None
+        elif (~binder_mask).any():
+            scores["binder_pae"] = float(np.mean(
+                np.concatenate([
+                    pae_matrix[np.ix_(binder_mask, ~binder_mask)].ravel(),
+                    pae_matrix[np.ix_(~binder_mask, binder_mask)].ravel(),
+                ])
+            ))
         else:
-            scores["binder_pae"] = np.float64(0.0)
+            # Single-chain edge case (no target tokens) — fall back to global mean
+            scores["binder_pae"] = float(np.mean(pae_matrix))
     else:
-        scores["binder_pae"] = np.float64(0.0)
+        scores["binder_pae"] = None
 
     # Chain pair PAE min - use chain_pair_gpde as approximation
     chain_pair_gpde = _unwrap(summary.get("chain_pair_gpde", [[0.0]]))

@@ -502,9 +502,21 @@ def extract_structure_and_scores(output_dir, design_name, binder_chain, select_m
     af3_scores["pae_matrix"] = pae_matrix
     af3_scores["pae"] = np.mean(pae_matrix)
     af3_scores["chain_pair_pae_min"] = np.array(summary_metrics['chain_pair_pae_min'])
+    # binder_pae: average PAE across the binder<->target interface (off-diagonal
+    # blocks of the PAE matrix). Earlier code used pae[binder, binder] which is
+    # the within-binder PAE (binder internal confidence), not the interface.
+    # Average both off-diagonal blocks (binder-rows × target-cols and
+    # target-rows × binder-cols) to get a symmetric interface score.
     binder_mask = np.array(full_metrics['token_chain_ids']) == binder_chain
-    pae_chain = pae_matrix[np.ix_(binder_mask, binder_mask)]  # double mask: rows AND columns
-    af3_scores["binder_pae"] = np.mean(pae_chain)
+    if binder_mask.any() and (~binder_mask).any():
+        af3_scores["binder_pae"] = float(np.mean(
+            np.concatenate([
+                pae_matrix[np.ix_(binder_mask, ~binder_mask)].ravel(),
+                pae_matrix[np.ix_(~binder_mask, binder_mask)].ravel(),
+            ])
+        ))
+    else:
+        af3_scores["binder_pae"] = float(np.mean(pae_matrix))
     #ptm
     af3_scores["ptm"] = [summary_metrics["ptm"]]
     af3_scores["iptm"] = [summary_metrics["iptm"]]

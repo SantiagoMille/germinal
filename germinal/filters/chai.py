@@ -185,9 +185,17 @@ def run_chai(
     scores_dict["plddt_binder"] = torch.mean(
         plddt[target_len:]
     )  # Average pLDDT for binder only
-    scores_dict["binder_pae"] = torch.mean(
-        torch.mean(pae[target_len:, target_len:])
-    )  # Average PAE for binder-target interface
+    # binder_pae: average PAE across the binder<->target interface (off-diagonal
+    # blocks). Earlier code used pae[target_len:, target_len:] which is the
+    # within-binder PAE (binder internal confidence), not the interface as the
+    # comment claimed. Average both off-diagonal blocks for a symmetric score.
+    if 0 < target_len < pae.shape[0]:
+        scores_dict["binder_pae"] = torch.mean(torch.cat([
+            pae[target_len:, :target_len].flatten(),  # binder rows × target cols
+            pae[:target_len, target_len:].flatten(),  # target rows × binder cols
+        ]))
+    else:
+        scores_dict["binder_pae"] = torch.mean(pae)
     scores_dict["chain_ptm"] = [1] #placeholder values for chai
     scores_dict["chain_iptm"] = [1] #placeholder values for chai
 
