@@ -349,17 +349,16 @@ def extract_protenix_scores(
     scores["pae_matrix"] = pae_matrix
     scores["pae"] = np.mean(pae_matrix) if pae_matrix.size > 1 else np.float64(0.0)
 
-    # binder_pae: average PAE across the binder<->target interface (off-diagonal
-    # blocks). Earlier code used pae[binder, binder] which is the within-binder
-    # PAE (binder internal confidence), not the interface.
-    # Average both off-diagonal blocks (binder×target and target×binder) for a
-    # symmetric interface score. Also validate binder_mask is non-empty: if
-    # token_asym_id ordering ever diverges from input, mask becomes empty and
-    # we'd silently report 0.0 (which would silently pass < threshold filters).
-    # Keep np.float64 (not Python float) so downstream `.item()` works.
+    # Binder PAE (PAE within binder chain). Validate binder_mask is non-empty:
+    # if token_asym_id ordering ever diverges from input, mask becomes empty
+    # and we'd silently report 0.0 (which would silently pass < threshold
+    # filters); set to None instead so the new fail-loud filter catches it.
     if pae_matrix.size > 1 and token_asym_id.size > 1:
         binder_mask = token_asym_id == binder_chain_idx
-        if not binder_mask.any():
+        if binder_mask.any():
+            binder_pae = pae_matrix[np.ix_(binder_mask, binder_mask)]
+            scores["binder_pae"] = np.mean(binder_pae)
+        else:
             print(
                 f"[WARNING] Protenix binder_mask empty: binder_chain_idx="
                 f"{binder_chain_idx} not found in token_asym_id "
@@ -368,16 +367,6 @@ def extract_protenix_scores(
                 flush=True,
             )
             scores["binder_pae"] = None
-        elif (~binder_mask).any():
-            scores["binder_pae"] = np.mean(
-                np.concatenate([
-                    pae_matrix[np.ix_(binder_mask, ~binder_mask)].ravel(),
-                    pae_matrix[np.ix_(~binder_mask, binder_mask)].ravel(),
-                ])
-            )
-        else:
-            # Single-chain edge case (no target tokens) — fall back to global mean
-            scores["binder_pae"] = np.mean(pae_matrix)
     else:
         scores["binder_pae"] = None
 

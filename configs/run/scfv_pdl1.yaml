@@ -72,6 +72,9 @@ af3_model_dir: null
 af3_db_dir: null
 msa_db_dir: null
 use_metagenomic_db: false
+# Cache binder MSA across designs (AF3 only). Requires msa_mode="colabfold";
+# set msa_mode above first or this gate will raise at run start.
+cache_binder_msa: false
 
 # Protenix configuration (required when structure_model == "protenix")
 protenix_conda_env: "protenix"                          # conda environment with protenix installed

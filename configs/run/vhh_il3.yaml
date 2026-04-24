@@ -41,6 +41,7 @@ seq_entropy_threshold: 0.10
 
 # IgLM settings
 grad_merge_method: "pcgrad"
+ablm_model: "iglm"                  # "iglm" or "ablang"
 ablm_scale: [0.0, 0.2, 0.4, 1.0]
 ablm_temp: 0.6
 iglm_species: "[HUMAN]"
@@ -70,6 +71,9 @@ af3_model_dir: null
 af3_db_dir: null
 msa_db_dir: null
 use_metagenomic_db: false
+# Cache binder MSA across designs (AF3 only). Requires msa_mode="colabfold";
+# set msa_mode above first or this gate will raise at run start.
+cache_binder_msa: false
 
 # Protenix configuration (required when structure_model == "protenix")
 protenix_conda_env: "protenix"                          # conda environment with protenix installed
@@ -96,6 +100,11 @@ sample_models: true
 num_models: 1
 num_recycles_design: 3
 recycle_mode: "last"
+
+# Relax (post-prediction) settings
+multi_relax: false                  # true → ensemble of n_relax PyRosetta relaxes
+n_relax: 5                          # only used when multi_relax=true
+relax_score_mode: "average"         # "average" or "best" (only used when multi_relax=true)
 
 # Other loss settings
 use_helix_loss: true
