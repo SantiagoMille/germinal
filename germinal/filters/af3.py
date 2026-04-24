@@ -280,19 +280,21 @@ def generate_colabfold_msa(sequence, design_name, output_dir, use_metagenomic_db
         return ""
 
     old_msa_path = os.path.join(output_dir, f"{design_name}_all", "uniref.a3m")
-    # Process MSA to ensure uniform sequence length for AF3 compatibility
-    remove_a3m_insertions(old_msa_path)
-    if os.path.exists(old_msa_path):
-        new_msa_path = os.path.join(output_dir, f"msas/{design_name}.a3m")
-        os.makedirs(os.path.dirname(new_msa_path), exist_ok=True)
-        shutil.copyfile(old_msa_path, new_msa_path)
-        shutil.rmtree(os.path.join(output_dir, f"{design_name}_all"))
-        return os.path.relpath(new_msa_path, output_dir)
-    else:
+    # Check existence before stripping insertions — on partial colabfold writes
+    # (timeout, network error, etc.) the file may be missing, and the strip call
+    # would crash with FileNotFoundError instead of falling back gracefully.
+    if not os.path.exists(old_msa_path):
         print(
             f"colabfold_search failed for {design_name}: MSA not found at {old_msa_path}. Falling back to no MSA."
         )
         return ""
+    # Process MSA to ensure uniform sequence length for AF3 compatibility
+    remove_a3m_insertions(old_msa_path)
+    new_msa_path = os.path.join(output_dir, f"msas/{design_name}.a3m")
+    os.makedirs(os.path.dirname(new_msa_path), exist_ok=True)
+    shutil.copyfile(old_msa_path, new_msa_path)
+    shutil.rmtree(os.path.join(output_dir, f"{design_name}_all"))
+    return os.path.relpath(new_msa_path, output_dir)
 
 
 def generate_msas(

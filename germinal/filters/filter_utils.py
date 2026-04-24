@@ -18,6 +18,27 @@ from germinal.filters import af3, chai, protenix, pDockQ, pyrosetta_utils
 from germinal.utils.io import IO, Trajectory
 
 
+def compute_cdr3_positions(run_settings: dict) -> list:
+    """Zero-indexed CDR-H3 positions, accounting for type (nb vs scfv) and vh_first.
+
+    For VL-first scFv the third CDR slot is L3; H3 sits in the second set of
+    CDRs, so we slice ``cdr_lengths[:2] : cdr_lengths[:3]``. For nb and
+    VH-first scFv the flat ``cdr_lengths[:-1]`` suffix lands on H3.
+    """
+    cdr_positions = run_settings["cdr_positions"]
+    cdr_lengths = run_settings["cdr_lengths"]
+    type_ = run_settings["type"].lower()
+    if type_ == "nb":
+        return cdr_positions[sum(cdr_lengths[:-1]):]
+    if type_ == "scfv":
+        if run_settings.get("vh_first", True):
+            return cdr_positions[sum(cdr_lengths[:2]):sum(cdr_lengths[:3])]
+        return cdr_positions[sum(cdr_lengths[:-1]):]
+    raise ValueError(
+        f"Type {run_settings['type']} not supported, select either nb or scfv"
+    )
+
+
 def run_filters(
     trajectory: Trajectory,
     run_settings: dict,
@@ -68,22 +89,7 @@ def run_filters(
         target_sequence.append(sequences_from_pdb[
             ch
         ])
-    # H-CDR3 positions (1-indexed). For VL-first scFv the third CDR slot is L3;
-    # H3 sits in the second set of CDRs. For nb and VH-first scFv the flat
-    # `cdr_lengths[:-1]` suffix lands on H3.
-    if run_settings["type"].lower() == "nb":
-        h3_positions = run_settings["cdr_positions"][sum(run_settings["cdr_lengths"][:-1]) :]
-    elif run_settings["type"].lower() == "scfv":
-        if run_settings.get("vh_first", True):
-            h3_positions = run_settings["cdr_positions"][
-                sum(run_settings["cdr_lengths"][:2]) : sum(run_settings["cdr_lengths"][:3])
-            ]
-        else:
-            h3_positions = run_settings["cdr_positions"][sum(run_settings["cdr_lengths"][:-1]) :]
-    else:
-        raise ValueError(
-            f"Type {run_settings['type']} not supported, select either nb or scfv"
-        )
+    h3_positions = compute_cdr3_positions(run_settings)
     cdr3 = np.array(h3_positions) + 1
 
     external_pdb, external_metrics, ipsae = run_structure_prediction(
@@ -621,17 +627,15 @@ def run_structure_prediction(
         )
     elif run_settings["structure_model"] == "chai":
 
-        # Use h3_positions computed by run_filters (PR #67 3-way branch
-        # correctly handles nb / VH-first scFv / VL-first scFv). The old
-        # hardcoded slice mis-sliced VL-first scFv runs (landed on H1/H2).
         # cdr3_idx passed to chai must be 1-indexed (PDB residue numbers,
         # matching the chai.restraints template format like "L13", "D108").
-        # h3_positions is 0-indexed, hence the +1.
-        if h3_positions is not None:
-            cdr3_idx = h3_positions[len(h3_positions)//2] + 1
-        else:
-            cdr3_idx = run_settings["cdr_positions"][run_settings["cdr_lengths"][0] + run_settings["cdr_lengths"][1]:]
-            cdr3_idx = cdr3_idx[len(cdr3_idx)//2] + 1
+        # compute_cdr3_positions returns 0-indexed, hence the +1. Reuse
+        # compute_cdr3_positions so the batch-fallback path (which enters here
+        # without h3_positions set by run_filters) gets the same 3-way branch
+        # and doesn't mis-slice VL-first scFv.
+        if h3_positions is None:
+            h3_positions = compute_cdr3_positions(run_settings)
+        cdr3_idx = h3_positions[len(h3_positions) // 2] + 1
 
         external_pdb, external_metrics = chai.run_chai(
             trajectory_sequence,
