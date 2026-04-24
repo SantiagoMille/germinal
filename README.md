@@ -13,6 +13,76 @@ We describe Germinal in the preprint: ["Efficient generation of epitope-targeted
 
 > **Last user-validated commit:** [`2c0a13b`](https://github.com/SantiagoMille/germinal/commit/2c0a13b76833b6463cb59c571cfeadf17fd710c1) (PR #61 "Fix tokenizer for IgLM"). Commits after this point have been runtime- and review-validated separately on branch `fix/post-pr67-review`.
 
+## Important changes since `2c0a13b`
+
+The commits below are bundled in PRs #55, #64, #67, #68, #69, #70 (merged) plus
+the in-flight branch `fix/post-pr67-review` (~22 follow-up fixes). User-visible
+behavior changes you should know about:
+
+### New features / config knobs
+- **Protenix structure model** (PR #55): `structure_model: "protenix"` is now
+  fully supported alongside `af3` and `chai`. Set `protenix_conda_env` and
+  `protenix_model_name` in your run config.
+- **AbLang language model** (PR #55, #64, #68): `ablm_model: "ablang"` is now
+  available alongside `iglm`. Method controlled by `ablm_method` (`"pll"`
+  default, or `"unmasked"`).
+- **MSA mode "target"** is the default for AF3/Protenix runs — MSA generated
+  only for the target. Use `msa_mode: "colabfold"` for a real binder MSA.
+- **Binder MSA caching** (`cache_binder_msa: true`) — reuses the first binder's
+  ColabFold MSA across all subsequent designs by rewriting only the query
+  line. Requires `msa_mode: "colabfold"`; raises ValueError otherwise.
+- **AF3/Protenix sample selection** (`af3_structure_select_mode`): pick the
+  `"best"` (highest ranking_score) or `"worst"` AF3/Protenix sample.
+- **Multi-relax ensemble** (`multi_relax: true`, `n_relax: 5`,
+  `relax_score_mode: "average"|"best"`): post-prediction PyRosetta relax can
+  now spawn N parallel relaxes and aggregate their interface scores.
+- **VL-first scFv** (PR #67): scFv runs with `vh_first: false` now correctly
+  identify H-CDR3 from the last CDR (was previously mis-sliced into VL).
+
+### Behavior changes / safer defaults
+- **`evaluate_filters` fail-loud on None metrics**: any filter whose metric is
+  `None` (e.g. Protenix without `full_data`) now FAILS the filter loudly
+  instead of silently passing. If you relied on the old silent-pass, either
+  fix the upstream metric or remove the filter.
+- **AbMPNN pipeline failures abort the run**: previously, an AbMPNN worker
+  crash returned `([], False)` and the trajectory loop continued silently.
+  Now a `[ABMPNN PIPELINE FATAL]` message is printed and the job exits so
+  the underlying issue can be diagnosed.
+- **Parallel-relax worker exceptions are surfaced**: `_relax_worker` now
+  writes a traceback to `{pdb}.err`; `pr_relax_parallel` reads and prints
+  it inside a `[RELAX ERROR]` block.
+- **Unknown `grad_merge_method` defaults to pcgrad** with a `[CONFIG WARNING]`
+  (was: silent drop of the AbLang/IgLM gradient).
+- **`get_grad_mlm` removed** from `colabdesign.ablang` (CUDA RNG state leak;
+  callers should use `method="pll"` or `method="unmasked"`).
+
+### Bug fixes (silent correctness issues)
+- **Chai cdr3_idx now uses the correct H3 residue** (PR #67 + follow-up): both
+  the CDR-position selection (PR #67) and the 0→1-indexed PDB residue number
+  conversion are now correct. scFv × Chai × VL-first × hotspot runs were
+  previously pinned one residue away from H3.
+- **Protenix binder MSA**: `_get_or_generate_msas` now generates a real binder
+  MSA when `msa_mode in {"local", "colabfold"}` (was target-only regardless).
+- **`_unwrap` recursion**: handles arbitrary depth of single-element list
+  wrapping in Protenix's tensor serialization (was: `[[scalar]]` → `[scalar]`).
+- **`interface_cdrs` zero-division guard**: empty interface no longer kills
+  the trajectory after structure prediction completed.
+- **`idx_from_ranges` empty input**: returns `[]` instead of IndexError.
+- **`lm_ll = -100` sentinel** for unknown `ablm_model` (was `-1`, easily
+  confused with a real bad pseudolikelihood).
+- **Chai tmp_dir mkdir(exist_ok=True)** to survive hash collisions.
+- **pDockQ2 chain-keying** (drop buggy per-chain aggregation, use ipsae's
+  scalar `pdockq2`/`LIS` directly).
+- **AbLang+IgLM `ablm_method` AttributeError** (PR #69 follow-up): defensive
+  `getattr(..., None)` for models that don't set this attribute.
+
+### Config additions you should review
+All five tracked configs in `configs/run/` now expose:
+- `multi_relax`, `n_relax`, `relax_score_mode` (only `scfv_pdl1.yaml` had
+  these before)
+- `cache_binder_msa` (was missing everywhere)
+- `ablm_model` is now present in `vhh_il3.yaml` (was missing → KeyError)
+
 ## Contents
 
 <!-- TOC -->
