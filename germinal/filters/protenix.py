@@ -148,9 +148,9 @@ def _get_or_generate_msas(
     Returns:
         dict: Mapping of chain IDs to absolute MSA file paths.
     """
-    from germinal.filters.af3 import (
-        generate_local_msa,
-        call_generate_colabfold_msa_with_timeout,
+    from germinal.filters.structure_common import (
+        get_or_generate_binder_msa,
+        get_or_generate_target_msa,
     )
 
     msa_paths = {}
@@ -158,39 +158,15 @@ def _get_or_generate_msas(
     os.makedirs(os.path.join(msa_dir, "msas"), exist_ok=True)
 
     for i, chain_id in enumerate(target_chains):
-        design_name_msa = f"target_{chain_id}"
-        msa_filename = f"msas/{design_name_msa}.a3m"
-
-        # Check existing locations (protenix or af3 inputs)
-        for base_dir in [msa_dir, os.path.join(output_dir, "af3_inputs")]:
-            existing = os.path.join(base_dir, msa_filename)
-            if os.path.exists(existing):
-                msa_paths[chain_id] = os.path.abspath(existing)
-                break
-
-        if chain_id in msa_paths:
-            continue
-
-        # Generate MSA for this target chain
-        sequence = target_seqs[i]
-        if msa_mode == "local":
-            rel_path = generate_local_msa(
-                sequence,
-                design_name_msa,
-                msa_dir,
-                run_settings["msa_db_dir"],
-                use_metagenomic_db=run_settings.get("use_metagenomic_db", False),
-            )
-        elif msa_mode in ["colabfold", "target"]:
-            rel_path = call_generate_colabfold_msa_with_timeout(
-                sequence,
-                design_name_msa,
-                msa_dir,
-                use_metagenomic_db=run_settings.get("use_metagenomic_db", False),
-            )
-        else:
-            continue
-
+        rel_path = get_or_generate_target_msa(
+            target_seq=target_seqs[i],
+            chain_id=chain_id,
+            output_dir=msa_dir,
+            msa_mode=msa_mode,
+            use_metagenomic_db=run_settings.get("use_metagenomic_db", False),
+            msa_db_dir=run_settings.get("msa_db_dir"),
+            extra_search_dirs=[os.path.join(output_dir, "af3_inputs")],
+        )
         if rel_path:
             full_path = os.path.join(msa_dir, rel_path)
             if os.path.exists(full_path):
@@ -202,30 +178,27 @@ def _get_or_generate_msas(
         binder_msa_name = f"binder_{design_name}"
         binder_msa_filename = f"msas/{binder_msa_name}.a3m"
 
-        # Reuse a previously-generated binder MSA for the same design if present
+        # First: per-design reuse (af3_inputs or protenix_inputs has the same
+        # binder MSA from a prior call for this exact design_name).
         for base_dir in [msa_dir, os.path.join(output_dir, "af3_inputs")]:
             existing = os.path.join(base_dir, binder_msa_filename)
             if os.path.exists(existing):
                 msa_paths[binder_chain] = os.path.abspath(existing)
                 break
 
+        # Cross-design: unified helper handles cache-hit + generation + seeding.
+        # Shared code path with af3 so any fix applies to both backends.
         if binder_chain not in msa_paths:
-            if msa_mode == "local":
-                rel_path = generate_local_msa(
-                    binder_seq,
-                    binder_msa_name,
-                    msa_dir,
-                    run_settings["msa_db_dir"],
-                    use_metagenomic_db=run_settings.get("use_metagenomic_db", False),
-                )
-            else:  # colabfold
-                rel_path = call_generate_colabfold_msa_with_timeout(
-                    binder_seq,
-                    binder_msa_name,
-                    msa_dir,
-                    use_metagenomic_db=run_settings.get("use_metagenomic_db", False),
-                )
-
+            rel_path = get_or_generate_binder_msa(
+                binder_seq=binder_seq,
+                design_name=binder_msa_name,
+                output_dir=msa_dir,
+                msa_mode=msa_mode,
+                cache_binder_msa=run_settings.get("cache_binder_msa", False),
+                use_metagenomic_db=run_settings.get("use_metagenomic_db", False),
+                msa_db_dir=run_settings.get("msa_db_dir"),
+                output_rel_path=binder_msa_filename,
+            )
             if rel_path:
                 full_path = os.path.join(msa_dir, rel_path)
                 if os.path.exists(full_path):
@@ -262,7 +235,7 @@ def extract_protenix_scores(
 
     # Find all summary confidence files across all seeds/samples
     confidence_files = []
-    for root, dirs, files in os.walk(results_folder):
+    for root, _dirs, files in os.walk(results_folder):
         for f in files:
             if "summary_confidence" in f and f.endswith(".json"):
                 confidence_files.append(os.path.join(root, f))
