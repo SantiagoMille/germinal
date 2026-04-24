@@ -271,7 +271,11 @@ def run_filters(
         binder_rmsd = 100
 
     # ========================== Get Log-likelihood from AbLM ==========================
-    if run_settings["ablm_model"] == "iglm":
+    # Default to "iglm" if config omits the key (e.g. older configs like
+    # vhh_il3.yaml). Without this, run_settings["ablm_model"] raises KeyError
+    # and crashes the whole trajectory at the LM-likelihood step.
+    ablm_model_name = run_settings.get("ablm_model", "iglm")
+    if ablm_model_name == "iglm":
         lm_ll = get_iglm_ll(
             sequence=trajectory_sequence,
             species_token=run_settings["iglm_species"],
@@ -279,7 +283,7 @@ def run_filters(
             vh_len=run_settings["vh_len"],
             vl_len=run_settings["vl_len"],
         )
-    elif run_settings["ablm_model"] == "ablang":
+    elif ablm_model_name == "ablang":
         lm_ll = get_ablang_ll(
             sequence=trajectory_sequence,
             vh_first=run_settings["vh_first"],
@@ -294,7 +298,7 @@ def run_filters(
         # too easy to confuse with a legitimately-bad lm_ll value.
         lm_ll = -100
         print(
-            f"\n\n[CONFIG ERROR] ablm_model={run_settings['ablm_model']!r} "
+            f"\n\n[CONFIG ERROR] ablm_model={ablm_model_name!r} "
             f"not recognized (expected 'iglm' or 'ablang'). Setting lm_ll=-100 "
             f"as a sentinel; any lm_ll filter will reject this design.\n\n",
             flush=True,

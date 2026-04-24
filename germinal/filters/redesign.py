@@ -299,9 +299,19 @@ def run_abmpnn_redesign_pipeline(
 
         return abmpnn_sequences, success
 
-    except Exception as e:
-        print(f"AbMPNN redesign pipeline failed: {e}")
+    except Exception:
+        # Fail-fast: an AbMPNN failure here means either OOM, a config bug, or
+        # genuine model breakage — none of which are safe to silently skip.
+        # Previous behavior (return [], False) made the trajectory loop continue
+        # to the next seed, hiding real bugs and wasting GPU time. Re-raise so
+        # SLURM marks the whole job FAILED and the user investigates.
         import traceback
-
+        print(
+            f"\n{'=' * 78}\n"
+            f"[ABMPNN PIPELINE FATAL] redesign failed; aborting the run "
+            f"so the underlying issue can be diagnosed.\n"
+            f"{'=' * 78}",
+            flush=True,
+        )
         traceback.print_exc()
-        return [], False
+        raise
